@@ -13,6 +13,8 @@ export default function ZionWifiBank() {
 
   const [processing, setProcessing] = useState(false);
 
+  const PAYSTACK_KEY = import.meta.env?.VITE_PAYSTACK_KEY || process.env.REACT_APP_PAYSTACK_KEY;
+
   useEffect(() => {
     async function loadPackages() {
       try {
@@ -35,28 +37,53 @@ export default function ZionWifiBank() {
     loadPackages();
   }, []);
 
-  const formatGhs = (x) => `GHS ${Number(x).toFixed(2)}`;
+  const formatGhs = x => `GHS ${Number(x).toFixed(2)}`;
 
-  const buyPackage = async (pkg) => {
+  // Paystack payment
+  const payPackage = (pkg) => {
     if (!phone || !name) return alert("Enter your name and phone number.");
-    setProcessing(true);
+    if (!window.PaystackPop) {
+      alert("Paystack script not loaded. Include https://js.paystack.co/v1/inline.js");
+      return;
+    }
 
+    const handler = window.PaystackPop.setup({
+      key: PAYSTACK_KEY,
+      email: email || "no-reply@zionwifi.com",
+      amount: Math.round(pkg.price * 100),
+      currency: "GHS",
+      metadata: {
+        custom_fields: [
+          { display_name: "Customer Name", variable_name: "name", value: name },
+          { display_name: "Phone", variable_name: "phone", value: phone },
+          { display_name: "Package", variable_name: "packageId", value: pkg.id },
+        ],
+      },
+      callback: function (response) {
+        handlePaymentSuccess(response.reference, pkg);
+      },
+      onClose: function () {},
+    });
+
+    handler.openIframe();
+  };
+
+  // After payment: assign credential & send SMS
+  const handlePaymentSuccess = async (reference, pkg) => {
+    setProcessing(true);
     try {
-      // Find an available credential
-      const snap = await getDocs(query(
-        collection(db, "credentials"),
-        where("packageId", "==", pkg.id),
-        where("used", "==", false)
-      ));
+      const snap = await getDocs(
+        query(collection(db, "credentials"), where("packageId", "==", pkg.id), where("used", "==", false))
+      );
 
       if (snap.empty) {
-        alert("No credentials available. Admin has been notified.");
+        alert("Payment succeeded but no credentials available. Admin has been notified.");
         await fetch("/api/send-sms", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             recipient: "+233545454000",
-            message: `No credentials for ${pkg.name} after purchase from ${name} (${phone})`
+            message: `No credentials for ${pkg.name} after payment from ${name} (${phone}). Ref: ${reference}`,
           }),
         });
         return;
@@ -65,7 +92,7 @@ export default function ZionWifiBank() {
       const credDoc = snap.docs[0];
       const credData = credDoc.data();
 
-      // Mark as used
+      // Mark credential as used
       await updateDoc(doc(db, "credentials", credDoc.id), {
         used: true,
         assignedTo: phone,
@@ -74,15 +101,16 @@ export default function ZionWifiBank() {
 
       // Log transaction
       await addDoc(collection(db, "transactions"), {
+        reference,
         packageId: pkg.id,
         name,
         phone,
-        username: credData.username,
         amount: pkg.price,
+        username: credData.username,
         assignedAt: new Date(),
       });
 
-      // Send credentials via serverless endpoint
+      // Send SMS securely via serverless function
       await fetch("/api/send-sms", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -113,19 +141,19 @@ export default function ZionWifiBank() {
           <input
             placeholder="Name"
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={e => setName(e.target.value)}
             className="p-2 rounded bg-white/10 placeholder:text-slate-200"
           />
           <input
             placeholder="Email (optional)"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={e => setEmail(e.target.value)}
             className="p-2 rounded bg-white/10 placeholder:text-slate-200"
           />
           <input
             placeholder="Phone (+233...)"
             value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            onChange={e => setPhone(e.target.value)}
             className="p-2 rounded bg-white/10 placeholder:text-slate-200"
           />
         </div>
@@ -133,23 +161,22 @@ export default function ZionWifiBank() {
         <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {loadingPackages
             ? <div>Loading packages...</div>
-            : packages.map((p) => (
+            : packages.map(p => (
               <div key={p.id} className="bg-white/10 p-6 rounded-2xl shadow hover:-translate-y-2 transition">
                 <h3 className="text-xl font-bold text-sky-400 mb-2">{p.name}</h3>
                 <p className="text-sm text-sky-200 mb-3">{p.description}</p>
                 <div className="flex items-center justify-between">
                   <div className="text-2xl font-extrabold text-sky-100">{formatGhs(p.price)}</div>
                   <button
-                    onClick={() => buyPackage(p)}
+                    onClick={() => payPackage(p)}
                     disabled={processing}
                     className="bg-sky-600 px-4 py-2 rounded-full hover:bg-sky-500"
                   >
-                    Buy
+                    Pay Now
                   </button>
                 </div>
               </div>
-            ))
-          }
+            ))}
         </section>
       </div>
     </div>
