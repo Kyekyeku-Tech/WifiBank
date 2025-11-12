@@ -131,7 +131,7 @@ export default function AdminDashboard() {
             <select
               value={packageId}
               onChange={e => setPackageId(e.target.value)}
-              className="p-2 rounded bg-white/10"
+              className="p-2 rounded bg-black/10"
             >
               {packages.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
