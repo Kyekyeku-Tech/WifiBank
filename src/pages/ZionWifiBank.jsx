@@ -11,10 +11,13 @@ export default function ZionWifiBank() {
   const [phone, setPhone] = useState("");
   const [processing, setProcessing] = useState(false);
 
+  const [availability, setAvailability] = useState({});
+  const [theme, setTheme] = useState("dark"); // default dark
+
   const PAYSTACK_KEY = import.meta.env?.VITE_PAYSTACK_KEY || process.env.REACT_APP_PAYSTACK_KEY;
 
-  // Track which packages are sold out
-  const [availability, setAvailability] = useState({});
+  // Toggle theme
+  const toggleTheme = () => setTheme(theme === "dark" ? "light" : "dark");
 
   // Load packages and availability
   useEffect(() => {
@@ -39,7 +42,6 @@ export default function ZionWifiBank() {
           avail[pkg.id] = !snapCreds.empty;
         }
         setAvailability(avail);
-
       } catch (err) {
         console.error(err);
       } finally {
@@ -53,10 +55,8 @@ export default function ZionWifiBank() {
 
   const payPackage = async (pkg) => {
     if (!phone || !name) return alert("Enter your name and phone number.");
-    if (!availability[pkg.id]) {
-      alert(`No credentials available for ${pkg.name}. Please contact admin.`);
-      return;
-    }
+    if (!availability[pkg.id]) return alert(`No credentials available for ${pkg.name}.`);
+
     if (!window.PaystackPop) {
       alert("Paystack script not loaded. Include https://js.paystack.co/v1/inline.js");
       return;
@@ -76,10 +76,8 @@ export default function ZionWifiBank() {
             { display_name: "Package", variable_name: "packageId", value: pkg.id },
           ],
         },
-        callback: function (response) {
-          handlePaymentSuccess(response.reference, pkg);
-        },
-        onClose: function () {},
+        callback: (response) => handlePaymentSuccess(response.reference, pkg),
+        onClose: () => {},
       });
       handler.openIframe();
     } catch (err) {
@@ -96,17 +94,8 @@ export default function ZionWifiBank() {
       const snap = await getDocs(
         query(collection(db, "credentials"), where("packageId", "==", pkg.id), where("used", "==", false))
       );
-
       if (snap.empty) {
         alert("Payment succeeded but no credentials available. Admin notified.");
-        await fetch("/api/send-sms", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            recipient: "+233545454000",
-            message: `No credentials for ${pkg.name} after payment from ${name} (${phone}). Ref: ${reference}`,
-          }),
-        });
         return;
       }
 
@@ -129,92 +118,84 @@ export default function ZionWifiBank() {
         assignedAt: new Date(),
       });
 
-      await fetch("/api/send-sms", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          recipient: phone,
-          message: `Your WiFi credentials:\nUsername: ${credData.username}\nPassword: ${credData.password}\nPackage: ${pkg.name}`,
-        }),
-      });
-
       alert(`Payment succeeded! Credentials sent to ${phone}.`);
     } catch (err) {
       console.error(err);
-      alert("Payment succeeded but credential assignment failed. Admin notified.");
+      alert("Payment succeeded but credential assignment failed.");
     } finally {
       setProcessing(false);
     }
   };
 
+  // Dynamic theme classes
+  const containerClass =
+    theme === "dark"
+      ? "min-h-screen bg-gradient-to-tr from-slate-900 via-slate-800 to-sky-700 text-white p-6"
+      : "min-h-screen bg-gradient-to-tr from-white via-gray-200 to-gray-300 text-black p-6";
+
+  const cardClass = isAvailable =>
+    theme === "dark"
+      ? `p-6 rounded-2xl shadow transition transform ${isAvailable ? "bg-white/10 hover:-translate-y-2" : "bg-white/20 opacity-50 cursor-not-allowed"}`
+      : `p-6 rounded-2xl shadow transition transform ${isAvailable ? "bg-gray-100 hover:-translate-y-2" : "bg-gray-200 opacity-50 cursor-not-allowed"}`;
+
+  const inputClass = "p-2 rounded placeholder:text-slate-400 " + (theme === "dark" ? "bg-white/10 text-white" : "bg-white text-black");
+
+  const buttonClass = (isAvailable) =>
+    isAvailable
+      ? theme === "dark"
+        ? "bg-sky-600 hover:bg-sky-500 text-white px-4 py-2 rounded-full font-bold"
+        : "bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-full font-bold"
+      : theme === "dark"
+        ? "bg-gray-400 text-gray-700 cursor-not-allowed px-4 py-2 rounded-full font-bold"
+        : "bg-gray-300 text-gray-800 cursor-not-allowed px-4 py-2 rounded-full font-bold";
+
   return (
-    <div className="min-h-screen bg-gradient-to-tr from-slate-900 via-slate-800 to-sky-700 text-white p-6">
+    <div className={containerClass}>
       <div className="max-w-5xl mx-auto">
+        {/* Header */}
         <header className="mb-8 flex flex-col md:flex-row justify-between items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-sky-400 mb-2">Zion WiFi Bank</h1>
-            <p className="text-slate-200">Fast — Unlimited — Reliable</p>
+            <h1 className={theme === "dark" ? "text-3xl font-bold text-sky-400 mb-2" : "text-3xl font-bold text-blue-600 mb-2"}>Zion WiFi Bank</h1>
+            <p className={theme === "dark" ? "text-slate-200" : "text-gray-700"}>Fast — Unlimited — Reliable</p>
           </div>
-          <a
-            href="tel:+233545454000"
-            className="bg-yellow-400 text-slate-900 px-4 py-2 rounded-full font-bold hover:bg-yellow-300"
-          >
-            Call Admin
-          </a>
+          <div className="flex gap-3">
+            <button
+              onClick={toggleTheme}
+              className={theme === "dark" ? "bg-gray-700 text-white px-4 py-2 rounded-full hover:bg-gray-600 font-bold" : "bg-gray-300 text-black px-4 py-2 rounded-full hover:bg-gray-200 font-bold"}
+            >
+              {theme === "dark" ? "Light Mode" : "Dark Mode"}
+            </button>
+            <a href="tel:+233545454000" className="bg-yellow-400 text-slate-900 px-4 py-2 rounded-full font-bold hover:bg-yellow-300">Call Admin</a>
+            <a href="/admin/login" className="bg-red-600 text-white px-4 py-2 rounded-full font-bold hover:bg-red-500">Admin</a>
+          </div>
         </header>
 
+        {/* User Inputs */}
         <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-3">
-          <input
-            placeholder="Name"
-            value={name}
-            onChange={e => setName(e.target.value)}
-            className="p-2 rounded bg-white/10 placeholder:text-slate-200"
-          />
-          <input
-            placeholder="Email (optional)"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            className="p-2 rounded bg-white/10 placeholder:text-slate-200"
-          />
-          <input
-            placeholder="Phone (+233...)"
-            value={phone}
-            onChange={e => setPhone(e.target.value)}
-            className="p-2 rounded bg-white/10 placeholder:text-slate-200"
-          />
+          <input placeholder="Name" value={name} onChange={e => setName(e.target.value)} className={inputClass} />
+          <input placeholder="Email (optional)" value={email} onChange={e => setEmail(e.target.value)} className={inputClass} />
+          <input placeholder="Phone (+233...)" value={phone} onChange={e => setPhone(e.target.value)} className={inputClass} />
         </div>
 
+        {/* Packages */}
         <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {loadingPackages
             ? <div>Loading packages...</div>
             : packages.map(p => {
-              const isAvailable = availability[p.id];
-              return (
-                <div
-                  key={p.id}
-                  className={`p-6 rounded-2xl shadow transition transform ${
-                    isAvailable ? "bg-white/10 hover:-translate-y-2" : "bg-white/20 opacity-50 cursor-not-allowed"
-                  }`}
-                >
-                  <h3 className="text-xl font-bold text-sky-400 mb-2">{p.name}</h3>
-                  <p className="text-sm text-sky-200 mb-3">{p.description}</p>
-                  <div className="flex items-center justify-between">
-                    <div className="text-2xl font-extrabold text-sky-100">{formatGhs(p.price)}</div>
-                    <button
-                      onClick={() => payPackage(p)}
-                      disabled={!isAvailable || processing}
-                      className={`px-4 py-2 rounded-full font-bold ${
-                        isAvailable
-                          ? "bg-sky-600 hover:bg-sky-500 text-white"
-                          : "bg-gray-400 text-gray-700 cursor-not-allowed"
-                      }`}
-                    >
-                      {isAvailable ? "Pay Now" : "Sold Out"}
-                    </button>
+                const isAvailable = availability[p.id];
+                return (
+                  <div key={p.id} className={cardClass(isAvailable)}>
+                    <h3 className={theme === "dark" ? "text-xl font-bold text-sky-400 mb-2" : "text-xl font-bold text-blue-600 mb-2"}>{p.name}</h3>
+                    <p className={theme === "dark" ? "text-sm text-sky-200 mb-3" : "text-sm text-gray-700 mb-3"}>{p.description}</p>
+                    <div className="flex items-center justify-between">
+                      <div className={theme === "dark" ? "text-2xl font-extrabold text-sky-100" : "text-2xl font-extrabold text-gray-800"}>{formatGhs(p.price)}</div>
+                      <button onClick={() => payPackage(p)} disabled={!isAvailable || processing} className={buttonClass(isAvailable)}>
+                        {isAvailable ? "Pay Now" : "Sold Out"}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
         </section>
       </div>
     </div>

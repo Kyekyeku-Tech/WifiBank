@@ -1,10 +1,13 @@
 import { signOut } from 'firebase/auth';
 import { auth } from '../services/firebaseConfig';
+import { useNavigate } from 'react-router-dom';
 
 function LogoutButton() {
+  const navigate = useNavigate();
+
   const handleLogout = async () => {
     await signOut(auth);
-    window.location.href = '/admin/login'; // redirect to login
+    navigate('/admin/login'); // SPA navigation without reload
   };
 
   return (
