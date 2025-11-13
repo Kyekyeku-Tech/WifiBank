@@ -193,40 +193,50 @@ export default function AdminDashboard() {
 
   return (
     <div className={containerClass}>
-      {/* Header */}
-      <motion.div
-        className="flex justify-between items-center mb-8"
-        initial={{ opacity: 0, y: -15 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
-        <h1
-          className={`text-4xl font-extrabold bg-clip-text text-transparent ${
-            theme === "dark"
-              ? "bg-gradient-to-r from-sky-400 to-fuchsia-500"
-              : "bg-gradient-to-r from-blue-400 to-pink-500"
-          }`}
-        >
-          Admin Dashboard
-        </h1>
-        <div className="flex gap-3">
-          <button
-            onClick={toggleTheme}
-            className={`px-4 py-2 rounded-full font-semibold transition-all ${
-              theme === "dark"
-                ? "bg-gray-700 text-white hover:bg-gray-600"
-                : "bg-gray-300 text-black hover:bg-gray-200"
-            }`}
-          >
-            {theme === "dark" ? "Light Mode" : "Dark Mode"}
-          </button>
-          <button
-            onClick={handleLogout}
-            className="bg-red-600 hover:bg-red-500 px-4 py-2 rounded-full font-semibold transition-all"
-          >
-            Logout
-          </button>
-        </div>
-      </motion.div>
+     {/* Header */}
+<motion.div
+  className="flex justify-between items-center mb-8"
+  initial={{ opacity: 0, y: -15 }}
+  animate={{ opacity: 1, y: 0 }}
+>
+  <h1
+    className={`text-4xl font-extrabold bg-clip-text text-transparent ${
+      theme === "dark"
+        ? "bg-gradient-to-r from-sky-400 to-fuchsia-500"
+        : "bg-gradient-to-r from-blue-400 to-pink-500"
+    }`}
+  >
+    Admin Dashboard
+  </h1>
+  <div className="flex gap-3">
+    <button
+      onClick={toggleTheme}
+      className={`px-4 py-2 rounded-full font-semibold transition-all ${
+        theme === "dark"
+          ? "bg-gray-700 text-white hover:bg-gray-600"
+          : "bg-gray-300 text-black hover:bg-gray-200"
+      }`}
+    >
+      {theme === "dark" ? "Light Mode" : "Dark Mode"}
+    </button>
+
+    {/* 🔹 New User Management Button */}
+    <button
+      onClick={() => navigate("/admin/users")}
+      className="bg-green-600 hover:bg-green-500 px-4 py-2 rounded-full font-semibold transition-all"
+    >
+      User Management
+    </button>
+
+    <button
+      onClick={handleLogout}
+      className="bg-red-600 hover:bg-red-500 px-4 py-2 rounded-full font-semibold transition-all"
+    >
+      Logout
+    </button>
+  </div>
+</motion.div>
+
 
       {/* Add Credential Section */}
       <motion.section className={sectionClass} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}>

@@ -4,6 +4,8 @@ import ZionWifiBank from './pages/ZionWifiBank';
 import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
 import PrivateRoute from './components/PrivateRoute';
+import UserManagement from './pages/UserManagement';
+
 
 function App() {
   return (
@@ -21,6 +23,15 @@ function App() {
             </PrivateRoute>
           }
         />
+        <Route
+  path="/admin/users"
+  element={
+    <PrivateRoute>
+      <UserManagement />
+    </PrivateRoute>
+  }
+/>
+
       </Routes>
     </Router>
   );
