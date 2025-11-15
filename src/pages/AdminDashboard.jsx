@@ -26,10 +26,6 @@ export default function AdminDashboard() {
   const [description, setDescription] = useState("");
   const [processing, setProcessing] = useState(false);
 
-  // Bulk paste textarea (comma-separated lines)
-  const [bulkText, setBulkText] = useState("");
-  const [bulkErrors, setBulkErrors] = useState([]); // errors for preview
-
   // CSV upload errors
   const [csvErrors, setCsvErrors] = useState([]);
 
@@ -39,14 +35,22 @@ export default function AdminDashboard() {
 
   const navigate = useNavigate();
 
-  // Pagination
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
-  const totalPages = Math.max(1, Math.ceil(transactions.length / itemsPerPage));
-  const currentTransactions = transactions.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
+  // --- Filters & Pagination states ---
+  // Credentials filters
+  const [credPackageFilter, setCredPackageFilter] = useState(""); // "" = all
+  const [credUsedFilter, setCredUsedFilter] = useState("all"); // all | used | unused
+  const [credSearch, setCredSearch] = useState("");
+
+  // Credentials pagination
+  const [credCurrentPage, setCredCurrentPage] = useState(1);
+  const credItemsPerPage = 10;
+
+  // Transactions filters
+  const [transPackageFilter, setTransPackageFilter] = useState(""); // "" = all
+
+  // Transactions pagination
+  const [transCurrentPage, setTransCurrentPage] = useState(1);
+  const transItemsPerPage = 10;
 
   const packages = [
     { id: "bronze-1w", name: "Bronze — 1 Week" },
@@ -78,11 +82,11 @@ export default function AdminDashboard() {
     loadCreds();
   }, []);
 
-  // Load transactions
+  // Load transactions (collection name confirmed as "MtnTransactions")
   useEffect(() => {
     const loadTransactions = async () => {
       try {
-        const snap = await getDocs(collection(db, "transactions"));
+        const snap = await getDocs(collection(db, "MtnTransactions"));
         setTransactions(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
       } catch (err) {
         console.error(err);
@@ -156,7 +160,7 @@ export default function AdminDashboard() {
   const deleteTransaction = async (id) => {
     if (!window.confirm("Delete this transaction?")) return;
     try {
-      await deleteDoc(doc(db, "transactions", id));
+      await deleteDoc(doc(db, "MtnTransactions", id));
       setTransactions((prev) => prev.filter((t) => t.id !== id));
     } catch (err) {
       console.error(err);
@@ -168,7 +172,7 @@ export default function AdminDashboard() {
     if (!window.confirm("Delete ALL transactions? This cannot be undone!"))
       return;
     try {
-      const snap = await getDocs(collection(db, "transactions"));
+      const snap = await getDocs(collection(db, "MtnTransactions"));
       const deletePromises = snap.docs.map((d) => deleteDoc(d.ref));
       await Promise.all(deletePromises);
       setTransactions([]);
@@ -185,91 +189,9 @@ export default function AdminDashboard() {
   };
 
   // --------------------------
-  // Bulk paste logic (comma-separated)
+  // CSV file upload from device (kept)
   // --------------------------
-  // Example accepted lines:
-  // username,password
-  // username,password,packageId
-  // username,password,packageId,description
-
-  const previewBulk = (text) => {
-    const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
-    const errors = [];
-    const preview = lines.map((line, idx) => {
-      const parts = line.split(",").map((p) => p.trim());
-      const [u, p, pkg, desc] = parts;
-      if (!u || !p) {
-        errors.push(`Line ${idx + 1}: username or password missing.`);
-      }
-      return {
-        line: idx + 1,
-        username: u || "",
-        password: p || "",
-        packageId: pkg || packageId, // fallback to currently selected package
-        description: desc || "",
-      };
-    });
-    setBulkErrors(errors);
-    return preview;
-  };
-
-  const handleBulkPasteUpload = async () => {
-    if (!bulkText.trim()) {
-      alert("Paste some lines first (comma-separated).");
-      return;
-    }
-
-    const preview = previewBulk(bulkText);
-    if (bulkErrors.length > 0) {
-      const proceed = window.confirm(
-        `There are ${bulkErrors.length} problems. See console for details. Proceed with valid rows?`
-      );
-      if (!proceed) return;
-    }
-
-    const validRows = preview.filter((r) => r.username && r.password);
-
-    if (validRows.length === 0) {
-      alert("No valid rows to upload.");
-      return;
-    }
-
-    setProcessing(true);
-    try {
-      // create all docs in parallel
-      const promises = validRows.map((r) =>
-        addDoc(collection(db, "credentials"), {
-          username: r.username,
-          password: r.password,
-          packageId: r.packageId,
-          description: r.description,
-          used: false,
-          assignedTo: null,
-          createdAt: new Date(),
-        })
-      );
-      await Promise.all(promises);
-
-      // reload credentials
-      const snap = await getDocs(collection(db, "credentials"));
-      setCredentials(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-
-      // clear bulk UI
-      setBulkText("");
-      setBulkErrors([]);
-      alert(`Uploaded ${validRows.length} credential(s) successfully.`);
-    } catch (err) {
-      console.error("Bulk upload error:", err);
-      alert("Error during bulk upload.");
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  // --------------------------
-  // CSV file upload from device
-  // --------------------------
-  // Accepts same formats as bulk paste:
+  // Accepts same formats as earlier:
   // username,password
   // username,password,packageId
   // username,password,packageId,description
@@ -375,11 +297,60 @@ export default function AdminDashboard() {
       ? "w-full text-left text-sm text-slate-200"
       : "w-full text-left text-sm text-gray-800";
 
+  // --------------------------
+  // Derived / filtered data & stats
+  // --------------------------
+  const totalCredentials = credentials.length;
+  const availableCredentials = credentials.filter((c) => !c.used).length;
+  const usedCredentials = credentials.filter((c) => !!c.used).length;
+
+  // Credentials filtering
+  const filteredCredentials = credentials
+    .filter((c) =>
+      credPackageFilter ? c.packageId === credPackageFilter : true
+    )
+    .filter((c) =>
+      credUsedFilter === "all"
+        ? true
+        : credUsedFilter === "used"
+        ? !!c.used
+        : !c.used
+    )
+    .filter((c) =>
+      credSearch ? c.username.toLowerCase().includes(credSearch.toLowerCase()) : true
+    );
+
+  const credTotalPages = Math.max(1, Math.ceil(filteredCredentials.length / credItemsPerPage));
+  const credCurrentSlice = filteredCredentials.slice(
+    (credCurrentPage - 1) * credItemsPerPage,
+    credCurrentPage * credItemsPerPage
+  );
+
+  // Transactions filtering (by package)
+  const filteredTransactions = transactions.filter((t) =>
+    transPackageFilter ? t.packageId === transPackageFilter : true
+  );
+
+  const transTotalPages = Math.max(1, Math.ceil(filteredTransactions.length / transItemsPerPage));
+  const transCurrentSlice = filteredTransactions.slice(
+    (transCurrentPage - 1) * transItemsPerPage,
+    transCurrentPage * transItemsPerPage
+  );
+
+  // Ensure current pages are within bounds when data changes
+  useEffect(() => {
+    setCredCurrentPage((p) => Math.min(p, credTotalPages));
+  }, [credTotalPages]);
+
+  useEffect(() => {
+    setTransCurrentPage((p) => Math.min(p, transTotalPages));
+  }, [transTotalPages]);
+
   return (
     <div className={containerClass}>
       {/* Header */}
       <motion.div
-        className="flex justify-between items-center mb-8"
+        className="flex justify-between items-center mb-6"
         initial={{ opacity: 0, y: -15 }}
         animate={{ opacity: 1, y: 0 }}
       >
@@ -485,6 +456,33 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {/* Mini Dashboard Stats */}
+      <motion.section
+        className={sectionClass}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+      >
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
+            <h3 className="text-sm font-semibold text-slate-300">🟩 Total Credentials</h3>
+            <p className="text-3xl font-bold mt-2">{totalCredentials}</p>
+            <p className="text-xs mt-1 text-slate-400">All credential records</p>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
+            <h3 className="text-sm font-semibold text-slate-300">🔵 Available (unused)</h3>
+            <p className="text-3xl font-bold mt-2">{availableCredentials}</p>
+            <p className="text-xs mt-1 text-slate-400">Not yet assigned / used</p>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
+            <h3 className="text-sm font-semibold text-slate-300">🔴 Used Credentials</h3>
+            <p className="text-3xl font-bold mt-2">{usedCredentials}</p>
+            <p className="text-xs mt-1 text-slate-400">Already used</p>
+          </div>
+        </div>
+      </motion.section>
+
       {/* Add Credential Section */}
       <motion.section
         className={sectionClass}
@@ -571,170 +569,196 @@ export default function AdminDashboard() {
           </button>
         </div>
 
-        {/* Bulk Paste Upload */}
+        {/* CSV Upload (bulk via file) */}
         <div className="mt-6">
-          <label className="font-semibold block mb-2">
-            Bulk Paste (comma-separated)
-          </label>
+          <label className="font-semibold block mb-2">Upload CSV</label>
           <p className="text-sm mb-2 text-slate-400">
-            Paste lines like: <code>username,password</code> or{" "}
-            <code>username,password,packageId</code>
+            Upload a CSV file from your device. Format:
+             <code>username,password,packageId</code>
           </p>
 
-          <textarea
-            value={bulkText}
-            onChange={(e) => {
-              setBulkText(e.target.value);
-              previewBulk(e.target.value);
-            }}
-            placeholder={"john,1234\namoah,pass88,bronze-1w,VIP user"}
-            rows={6}
-            className={`w-full p-3 rounded-lg outline-none placeholder:text-slate-400 ${
-              theme === "dark"
-                ? "bg-gray-900/60 border border-slate-700 text-white"
-                : "bg-white border border-gray-400 text-black"
-            }`}
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            onChange={handleCSVUpload}
+            className="p-2 rounded border bg-transparent"
           />
 
-          <div className="flex gap-3 mt-3">
-            <button
-              onClick={handleBulkPasteUpload}
-              disabled={processing}
-              className="px-4 py-2 rounded-full font-semibold bg-indigo-600 hover:bg-indigo-500"
-            >
-              {processing ? "Uploading..." : "Upload Bulk"}
-            </button>
-            <button
-              onClick={() => {
-                setBulkText("");
-                setBulkErrors([]);
-                setCsvErrors([]);
-              }}
-              className="px-4 py-2 rounded-full font-semibold bg-gray-600/30"
-            >
-              Clear
-            </button>
-          </div>
-
-          {/* Errors preview */}
-          {bulkErrors.length > 0 && (
+          {/* CSV Errors */}
+          {csvErrors.length > 0 && (
             <div className="mt-3 p-3 bg-red-900/30 rounded text-sm">
-              <strong>Problems:</strong>
+              <strong>CSV problems:</strong>
               <ul className="list-disc pl-5">
-                {bulkErrors.map((err, i) => (
+                {csvErrors.map((err, i) => (
                   <li key={i}>{err}</li>
                 ))}
               </ul>
             </div>
           )}
-
-          {/* 📌 CSV UPLOAD ADDED HERE */}
-          <div className="mt-6">
-            <label className="font-semibold block mb-2">Upload CSV</label>
-            <p className="text-sm mb-2 text-slate-400">
-              Upload a CSV file from your device. Format:
-              <code>username,password</code> or{" "}
-              <code>username,password,packageId</code>
-            </p>
-
-            <input
-              type="file"
-              accept=".csv,text/csv"
-              onChange={handleCSVUpload}
-              className="p-2 rounded border bg-transparent"
-            />
-
-            {/* CSV Errors */}
-            {csvErrors.length > 0 && (
-              <div className="mt-3 p-3 bg-red-900/30 rounded text-sm">
-                <strong>CSV problems:</strong>
-                <ul className="list-disc pl-5">
-                  {csvErrors.map((err, i) => (
-                    <li key={i}>{err}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
         </div>
       </motion.section>
 
-      {/* Credentials Table */}
+      {/* Credentials Table with Filters & Pagination */}
       <motion.section
         className={sectionClass}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
       >
-        <h2
-          className={`text-2xl font-semibold mb-4 ${
-            theme === "dark" ? "text-sky-400" : "text-blue-600"
-          }`}
-        >
-          All Credentials
-        </h2>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+          <h2
+            className={`text-2xl font-semibold ${
+              theme === "dark" ? "text-sky-400" : "text-blue-600"
+            }`}
+          >
+            All Credentials
+          </h2>
+
+          <div className="flex flex-col md:flex-row gap-3 items-start md:items-center">
+            <input
+              placeholder="Search username..."
+              value={credSearch}
+              onChange={(e) => {
+                setCredSearch(e.target.value);
+                setCredCurrentPage(1);
+              }}
+              className={`p-2 rounded-lg outline-none w-48 ${
+                theme === "dark"
+                  ? "bg-gray-900/60 border border-slate-700 text-white"
+                  : "bg-white border border-gray-400 text-black"
+              }`}
+            />
+
+            <select
+              value={credPackageFilter}
+              onChange={(e) => {
+                setCredPackageFilter(e.target.value);
+                setCredCurrentPage(1);
+              }}
+              className={`p-2 rounded-lg outline-none ${
+                theme === "dark"
+                  ? "bg-gray-900/60 border border-slate-700 text-white"
+                  : "bg-white border border-gray-400 text-black"
+              }`}
+            >
+              <option value="">All packages</option>
+              {packages.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={credUsedFilter}
+              onChange={(e) => {
+                setCredUsedFilter(e.target.value);
+                setCredCurrentPage(1);
+              }}
+              className={`p-2 rounded-lg outline-none ${
+                theme === "dark"
+                  ? "bg-gray-900/60 border border-slate-700 text-white"
+                  : "bg-white border border-gray-400 text-black"
+              }`}
+            >
+              <option value="all">All</option>
+              <option value="unused">Unused</option>
+              <option value="used">Used</option>
+            </select>
+          </div>
+        </div>
+
         {loadingCreds ? (
           <p className={theme === "dark" ? "text-slate-400" : "text-gray-700"}>
             Loading credentials...
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className={tableClass}>
-              <thead
-                className={
-                  theme === "dark"
-                    ? "border-b border-slate-600 text-slate-300"
-                    : "border-b border-gray-400 text-gray-700"
-                }
-              >
-                <tr>
-                  <th className="px-3 py-2">Username</th>
-                  <th className="px-3 py-2">Password</th>
-                  <th className="px-3 py-2">Package</th>
-                  <th className="px-3 py-2">Used</th>
-                  <th className="px-3 py-2">Assigned To</th>
-                  <th className="px-3 py-2 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {credentials.map((c) => (
-                  <motion.tr
-                    key={c.id}
-                    className={
-                      theme === "dark"
-                        ? "border-b border-slate-700 hover:bg-slate-700/40"
-                        : "border-b border-gray-400 hover:bg-gray-200"
-                    }
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                  >
-                    <td className="px-3 py-2">{c.username}</td>
-                    <td className="px-3 py-2">{c.password}</td>
-                    <td className="px-3 py-2">{c.packageId}</td>
-                    <td className="px-3 py-2">{c.used ? "Yes" : "No"}</td>
-                    <td className="px-3 py-2">{c.assignedTo || "-"}</td>
-                    <td className="px-3 py-2 text-right space-x-2">
-                      <button
-                        onClick={() => resetCredential(c.id)}
-                        className="bg-yellow-400 text-black px-3 py-1 rounded hover:bg-yellow-300 text-xs font-semibold"
-                      >
-                        Reset
-                      </button>
-                      <button
-                        onClick={() => deleteCredential(c.id)}
-                        className="bg-red-600 px-3 py-1 rounded hover:bg-red-500 text-xs font-semibold"
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </motion.tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <>
+            <div className="overflow-x-auto">
+              <table className={tableClass}>
+                <thead
+                  className={
+                    theme === "dark"
+                      ? "border-b border-slate-600 text-slate-300"
+                      : "border-b border-gray-400 text-gray-700"
+                  }
+                >
+                  <tr>
+                    <th className="px-3 py-2">Username</th>
+                    <th className="px-3 py-2">Password</th>
+                    <th className="px-3 py-2">Package</th>
+                    <th className="px-3 py-2">Used</th>
+                    <th className="px-3 py-2">Assigned To</th>
+                    <th className="px-3 py-2 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {credCurrentSlice.map((c) => (
+                    <motion.tr
+                      key={c.id}
+                      className={
+                        theme === "dark"
+                          ? "border-b border-slate-700 hover:bg-slate-700/40"
+                          : "border-b border-gray-400 hover:bg-gray-200"
+                      }
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                    >
+                      <td className="px-3 py-2">{c.username}</td>
+                      <td className="px-3 py-2">{c.password}</td>
+                      <td className="px-3 py-2">{c.packageId}</td>
+                      <td className="px-3 py-2">{c.used ? "Yes" : "No"}</td>
+                      <td className="px-3 py-2">{c.assignedTo || "-"}</td>
+                      <td className="px-3 py-2 text-right space-x-2">
+                        <button
+                          onClick={() => resetCredential(c.id)}
+                          className="bg-yellow-400 text-black px-3 py-1 rounded hover:bg-yellow-300 text-xs font-semibold"
+                        >
+                          Reset
+                        </button>
+                        <button
+                          onClick={() => deleteCredential(c.id)}
+                          className="bg-red-600 px-3 py-1 rounded hover:bg-red-500 text-xs font-semibold"
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </motion.tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Credentials Pagination */}
+            {credTotalPages > 1 && (
+              <div className="flex justify-center items-center gap-4 mt-4">
+                <button
+                  onClick={() => setCredCurrentPage((prev) => Math.max(prev - 1, 1))}
+                  disabled={credCurrentPage === 1}
+                  className="px-4 py-2 bg-slate-700 rounded-full hover:bg-slate-600 disabled:opacity-40"
+                >
+                  Prev
+                </button>
+
+                <span className={theme === "dark" ? "text-slate-300" : "text-gray-700"}>
+                  Page {credCurrentPage} of {credTotalPages}
+                </span>
+
+                <button
+                  onClick={() =>
+                    setCredCurrentPage((prev) => Math.min(prev + 1, credTotalPages))
+                  }
+                  disabled={credCurrentPage === credTotalPages}
+                  className="px-4 py-2 bg-slate-700 rounded-full hover:bg-slate-600 disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </>
         )}
       </motion.section>
 
-      {/* Transactions Table */}
+      {/* Transactions Table with package filter & pagination */}
       <motion.section
         className={sectionClass}
         initial={{ opacity: 0 }}
@@ -754,6 +778,28 @@ export default function AdminDashboard() {
           >
             Delete All
           </button>
+        </div>
+
+        <div className="flex flex-wrap gap-3 items-center mb-4">
+          <select
+            value={transPackageFilter}
+            onChange={(e) => {
+              setTransPackageFilter(e.target.value);
+              setTransCurrentPage(1);
+            }}
+            className={`p-2 rounded-lg outline-none ${
+              theme === "dark"
+                ? "bg-gray-900/60 border border-slate-700 text-white"
+                : "bg-white border border-gray-400 text-black"
+            }`}
+          >
+            <option value="">All packages</option>
+            {packages.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
         </div>
 
         {loadingTrans ? (
@@ -782,7 +828,7 @@ export default function AdminDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {currentTransactions.map((t) => (
+                  {transCurrentSlice.map((t) => (
                     <motion.tr
                       key={t.id}
                       className={
@@ -817,30 +863,32 @@ export default function AdminDashboard() {
               </table>
             </div>
 
-           {/* Pagination */}
-{totalPages > 1 && (
-  <div className="flex justify-center items-center gap-4 mt-4">
-    <button
-      onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-      disabled={currentPage === 1}
-      className="px-4 py-2 bg-slate-700 rounded-full hover:bg-slate-600 disabled:opacity-40"
-    >
-      Prev
-    </button>
+            {/* Transactions Pagination */}
+            {transTotalPages > 1 && (
+              <div className="flex justify-center items-center gap-4 mt-4">
+                <button
+                  onClick={() => setTransCurrentPage((prev) => Math.max(prev - 1, 1))}
+                  disabled={transCurrentPage === 1}
+                  className="px-4 py-2 bg-slate-700 rounded-full hover:bg-slate-600 disabled:opacity-40"
+                >
+                  Prev
+                </button>
 
-    <span className={theme === "dark" ? "text-slate-300" : "text-gray-700"}>
-      Page {currentPage} of {totalPages}
-    </span>
+                <span className={theme === "dark" ? "text-slate-300" : "text-gray-700"}>
+                  Page {transCurrentPage} of {transTotalPages}
+                </span>
 
-    <button
-      onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-      disabled={currentPage === totalPages}
-      className="px-4 py-2 bg-slate-700 rounded-full hover:bg-slate-600 disabled:opacity-40"
-    >
-      Next
-    </button>
-  </div>
-)}
+                <button
+                  onClick={() =>
+                    setTransCurrentPage((prev) => Math.min(prev + 1, transTotalPages))
+                  }
+                  disabled={transCurrentPage === transTotalPages}
+                  className="px-4 py-2 bg-slate-700 rounded-full hover:bg-slate-600 disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
+            )}
           </>
         )}
       </motion.section>
