@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { collection, getDocs, query, where, updateDoc, doc, addDoc } from "firebase/firestore";
 import { db } from "../firebase";
+import jsPDF from "jspdf";
 
 export default function ZionWifiBank() {
   const [packages, setPackages] = useState([]);
@@ -33,7 +34,6 @@ export default function ZionWifiBank() {
         ];
         setPackages(pkgs);
 
-        // Check credential availability
         const avail = {};
         for (let pkg of pkgs) {
           const snapCreds = await getDocs(
@@ -53,6 +53,57 @@ export default function ZionWifiBank() {
 
   const formatGhs = x => `GHS ${Number(x).toFixed(2)}`;
 
+  // -------------------------------
+  //  TICKET GENERATOR (PDF + JPG)
+  // -------------------------------
+  const generateTicket = (details) => {
+    const { reference, pkg, username } = details;
+
+    const docPDF = new jsPDF();
+    docPDF.setFontSize(18);
+    docPDF.text("Chidiz WiFi Bank – Access Ticket", 20, 20);
+
+    docPDF.setFontSize(12);
+    docPDF.text(`Name: ${name}`, 20, 40);
+    docPDF.text(`Phone: ${phone}`, 20, 50);
+    docPDF.text(`Package: ${pkg.name}`, 20, 60);
+    docPDF.text(`Username: ${username}`, 20, 70);
+    docPDF.text(`Reference: ${reference}`, 20, 80);
+    docPDF.text(`Date: ${new Date().toLocaleString()}`, 20, 90);
+
+    docPDF.save(`Ticket-${reference}.pdf`);
+
+    // JPG VERSION
+    const canvas = document.createElement("canvas");
+    canvas.width = 700;
+    canvas.height = 400;
+    const ctx = canvas.getContext("2d");
+
+    ctx.fillStyle = "#1e293b";
+    ctx.fillRect(0, 0, 700, 400);
+
+    ctx.fillStyle = "white";
+    ctx.font = "28px Arial";
+    ctx.fillText("Chidiz WiFi Bank Ticket", 180, 50);
+
+    ctx.font = "20px Arial";
+    ctx.fillText(`Name: ${name}`, 50, 120);
+    ctx.fillText(`Phone: ${phone}`, 50, 160);
+    ctx.fillText(`Package: ${pkg.name}`, 50, 200);
+    ctx.fillText(`Username: ${username}`, 50, 240);
+    ctx.fillText(`Reference: ${reference}`, 50, 280);
+
+    const jpgURL = canvas.toDataURL("image/jpeg");
+
+    const a = document.createElement("a");
+    a.href = jpgURL;
+    a.download = `Ticket-${reference}.jpg`;
+    a.click();
+  };
+
+  // -------------------------------
+  // PAYMENT SUCCESS HANDLER
+  // -------------------------------
   const payPackage = async (pkg) => {
     if (!phone || !name) return alert("Enter your name and phone number.");
     if (!availability[pkg.id]) return alert(`No credentials available for ${pkg.name}.`);
@@ -95,7 +146,7 @@ export default function ZionWifiBank() {
         query(collection(db, "credentials"), where("packageId", "==", pkg.id), where("used", "==", false))
       );
       if (snap.empty) {
-        alert("Payment succeeded but no credentials available. Admin notified.");
+        alert("Payment succeeded but no credentials available.");
         return;
       }
 
@@ -118,7 +169,15 @@ export default function ZionWifiBank() {
         assignedAt: new Date(),
       });
 
-      alert(`Payment succeeded! Credentials sent to ${phone}.`);
+      alert(`Payment succeeded! Downloading your ticket.`);
+      
+      // Generate ticket (PDF + JPG)
+      generateTicket({
+        reference,
+        pkg,
+        username: credData.username
+      });
+
     } catch (err) {
       console.error(err);
       alert("Payment succeeded but credential assignment failed.");
@@ -152,12 +211,14 @@ export default function ZionWifiBank() {
   return (
     <div className={containerClass}>
       <div className="max-w-5xl mx-auto">
+
         {/* Header */}
         <header className="mb-8 flex flex-col md:flex-row justify-between items-center gap-4">
           <div>
-            <h1 className={theme === "dark" ? "text-3xl font-bold text-sky-400 mb-2" : "text-3xl font-bold text-blue-600 mb-2"}>Zion WiFi Bank</h1>
+            <h1 className={theme === "dark" ? "text-3xl font-bold text-sky-400 mb-2" : "text-3xl font-bold text-blue-600 mb-2"}>Chidiz WiFi Bank</h1>
             <p className={theme === "dark" ? "text-slate-200" : "text-gray-700"}>Fast — Unlimited — Reliable</p>
           </div>
+
           <div className="flex gap-3">
             <button
               onClick={toggleTheme}
@@ -197,6 +258,7 @@ export default function ZionWifiBank() {
                 );
               })}
         </section>
+
       </div>
     </div>
   );
