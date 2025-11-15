@@ -57,7 +57,7 @@ export default function ZionWifiBank() {
   // PDF version
   const docPDF = new jsPDF();
   docPDF.setFontSize(18);
-  docPDF.text("Chidiz WiFi Bank – Access Ticket", 20, 20);
+  docPDF.text("Starlink WiFi Bank – Access Ticket", 20, 20);
 
   docPDF.setFontSize(12);
   docPDF.text(`Name: ${name}`, 20, 40);
@@ -81,7 +81,7 @@ export default function ZionWifiBank() {
 
   ctx.fillStyle = "white";
   ctx.font = "28px Arial";
-  ctx.fillText("Chidiz WiFi Bank Ticket", 150, 50);
+  ctx.fillText("Starlink WiFi Bank Ticket", 150, 50);
 
   ctx.font = "20px Arial";
   ctx.fillText(`Name: ${name}`, 50, 120);
@@ -116,7 +116,7 @@ export default function ZionWifiBank() {
     try {
       const handler = window.PaystackPop.setup({
         key: PAYSTACK_KEY,
-        email: email || "no-reply@zionwifi.com",
+        email: email || "no-reply@starlinkwifi.com",
         amount: Math.round(pkg.price * 100),
         currency: "GHS",
         metadata: {
@@ -220,7 +220,7 @@ export default function ZionWifiBank() {
         {/* Header */}
         <header className="mb-8 flex flex-col md:flex-row justify-between items-center gap-4">
           <div>
-            <h1 className={theme === "dark" ? "text-3xl font-bold text-sky-400 mb-2" : "text-3xl font-bold text-blue-600 mb-2"}>Chidiz WiFi Bank</h1>
+            <h1 className={theme === "dark" ? "text-3xl font-bold text-sky-400 mb-2" : "text-3xl font-bold text-blue-600 mb-2"}>Starlink WiFi Bank</h1>
             <p className={theme === "dark" ? "text-slate-200" : "text-gray-700"}>Fast — Unlimited — Reliable</p>
           </div>
 
