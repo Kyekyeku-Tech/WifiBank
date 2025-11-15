@@ -231,7 +231,7 @@ export default function ZionWifiBank() {
             >
               {theme === "dark" ? "Light Mode" : "Dark Mode"}
             </button>
-            <a href="tel:+233545454000" className="bg-yellow-400 text-slate-900 px-4 py-2 rounded-full font-bold hover:bg-yellow-300">Call Admin</a>
+            <a href="tel:0543767677" className="bg-yellow-400 text-slate-900 px-4 py-2 rounded-full font-bold hover:bg-yellow-300">Call Admin</a>
             <a href="/admin/login" className="bg-red-600 text-white px-4 py-2 rounded-full font-bold hover:bg-red-500">Admin</a>
           </div>
         </header>
