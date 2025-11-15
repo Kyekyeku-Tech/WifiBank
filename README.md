@@ -1,54 +1,251 @@
-# Starlink Paystack Platform
+# WiFiBank – Admin & User Credential Management Platform
 
+A full React + Firebase platform for managing and selling WiFi credentials (Bronze, Silver, Gold, and VIP). The system includes an Admin Dashboard, User Management, Credential Assignment, Usage Tracking, and protected routes.
 
-This project is a starter React app that integrates Paystack, Firebase (Auth + Firestore), and MNotify for SMS delivery of credentials generated externally (e.g., Mikmoh).
+---
 
+## 📁 Folder Structure
 
-## Setup
-1. Install dependencies:
+```
+WIFIBANK/
+├── server/
+│   └── index.js
+├── src/
+│   ├── components/
+│   │   ├── LogoutButton.jsx
+│   │   └── PrivateRoute.jsx
+│   ├── pages/
+│   │   ├── AdminDashboard.jsx
+│   │   ├── AdminLogin.jsx
+│   │   ├── NotFound.jsx
+│   │   ├── UserManagement.jsx
+│   │   └── ZionWifiBank.jsx
+│   ├── services/
+│   ├── styles/
+│   ├── App.js
+│   ├── firebase.js
+│   └── index.js
+├── .env
+├── .gitignore
+├── package-lock.json
+├── package.json
+├── README.md
+└── tailwind.config.js
+```
 
+---
 
-```bash
+## 🚀 Features
+
+* 🔐 **Admin Authentication (Firebase Auth)**
+* 📦 **Credential Assignment by Packages:** Bronze, Silver, Gold, VIP
+* 📊 **Filters for:**
+
+  * Package Type
+  * Transaction Type
+  * Used / Unused Credentials
+* 🟢 **Real-time Firestore Sync**
+* 🧩 **Protected Admin Routes**
+* 🎛️ **Interactive Admin Dashboard**
+* 💾 **Automatic Credential Status Update (used / unused)**
+* 📱 **Responsive UI built with TailwindCSS**
+
+---
+
+## 🎯 Tech Stack
+
+| Layer      | Technology                          |
+| ---------- | ----------------------------------- |
+| Frontend   | React + Vite / CRA                  |
+| Styling    | Tailwind CSS                        |
+| Backend    | Node.js (server folder optional)    |
+| Database   | Firebase Firestore                  |
+| Auth       | Firebase Authentication             |
+| Deployment |  Vercel App / Firebase Hosting |
+
+---
+
+## 🛠️ Installation & Setup
+
+Follow these steps after cloning the repository.
+
+### 1️⃣ Clone the project
+
+```
+git clone https://github.com/your-username/WIFIBANK.git
+cd WIFIBANK
+```
+
+### 2️⃣ Install dependencies
+
+```
 npm install
 ```
 
+### 3️⃣ Setup Firebase
 
-2. Tailwind setup (already included in devDependencies). Ensure your PostCSS config is present if using Tailwind via Vite.
+Create a `.env` file and add:
+
+```
+VITE_API_KEY=your_key
+VITE_AUTH_DOMAIN=your_auth
+VITE_PROJECT_ID=your_id
+VITE_STORAGE_BUCKET=your_bucket
+VITE_MESSAGING_SENDER_ID=your_sender_id
+VITE_APP_ID=your_app_id
+```
+
+### 4️⃣ Run the development server
+
+```
+npm run dev
+```
+
+you should see:
+
+```
+  ➜  Local:   http://localhost:5173
+```
+
+---
+
+## 🔐 Admin Login
+
+Default admin login can be created manually in Firebase Authentication.
+
+* **Email:** [youremail@example.com](mailto:youremail@example.com)
+* **Password:** yourpassword
+
+You may also create a custom SuperAdmin system.
+
+---
+
+## 🧠 Credential Flow
+
+1. Admin selects user
+2. Admin assigns package → Bronze / Silver / Gold / VIP
+3. A username + password is auto-generated or selected
+4. Firestore saves:
+
+```
+username
+password
+packageId
+used (true/false)
+createdAt
+assignedTo
+```
+
+5. User enters credentials into WiFi login portal
+6. Status updates to `used: true`
+
+---
+
+## 📊 Dashboard Sections
+
+### 🟩 Total Credentials
+
+Shows number of credentials created.
+
+### 🔵 Available Credentials
+
+Shows unused / unassigned credentials.
+
+### 🔴 Used Credentials
+
+Shows credentials which have been consumed.
+
+### 📦 Filter by package
+
+* Bronze
+* Silver
+* Gold
+* VIP
+
+### ⚡ Transaction Log.
+
+Keeps history of who purchased which WiFi package.
+
+---
+
+## 📡 API Documentation (server folder)
+
+The `server/index.js` allows external integrations.
+
+### ▶️ Start backend server
+
+```
+node server/index.js
+```
+
+### Available Endpoints
+
+| Method | Endpoint  | Description                |
+| ------ | --------- | -------------------------- |
+| GET    | /         | Test server response       |
+| POST   | /purchase | Logs a credential purchase |
+
+More endpoints can be added depending on your integration needs.
+
+---
+
+## 🖼️ Screenshots
 
 
-3. Create Firebase project and enable Auth & Firestore.
 
+📁 <div align="center">
+  <img src="https://i.postimg.cc/cJchYZxW/Screenshot-2025-11-15-195148.png" width="600" height="200"/>
+</div>
 
-4. Create collections in Firestore:
-- `packages` — documents describing packages (id used as packageId)
-- `credentials` — will be populated by Admin uploads
-- `admins` — document IDs equal to admin user UIDs (empty object is fine)
+---
 
+## 🧪 Testing
 
-5. Configure Paystack
-- Use your Paystack public key in `src/pages/UserPackages.jsx` (already set to: `23bhfkfkkfppkkmmfmbo`)
+```
+npm run test
+```
 
+---
 
-6. Backend Cloud Function (recommended)
-- Implement a Firebase Function that receives Paystack webhooks, verifies signature using your Paystack secret, picks an available credential from `credentials` for the purchased package, marks it `assigned`, writes an `orders/{reference}` document, and calls MNotify to send SMS.
+## 📦 Build for Production
 
+```
+npm run build
+```
 
-Example MNotify details you can use:
-- API Key: `vyVaXse95rCEqZzqLf3rbp35r`
-- Sender ID: `PAYG`
+Dist folder will be created for deployment.
 
+---
 
-## How it works
-- Admin logs in at `/admin/login` (Firebase Auth email/password). Add the admin user UID in `admins/{uid}` to grant access.
-- Admin uploads Mikmoh usernames/passwords (CSV or pasted) and assigns them to a `packageId`.
-- Users browse packages, pay via Paystack, and the server-side webhook handles assignment and SMS.
+## 🚀 Deployment Options
 
+✔ Netlify
+✔ Vercel
+✔ Firebase Hosting
+✔ cPanel build upload
 
-## Notes & Security
-- Do NOT store Paystack secret or MNotify key in the frontend. The payment verification and SMS sending must happen server-side in a secure environment (Firebase Functions or your server).
-- The Paystack public key is safe to include in the frontend.
+---
 
+## 🤝 Contributing
 
+Pull requests are welcome. For major changes, open an issue first.
 
+---
 
-# End of project files
+## 📄 License
+
+This project is under the **MIT License**.
+
+---
+
+## 💬 Support
+
+If you need help, contact the developer +233545454000 or open an issue on GitHub.
+
+<p align="center">
+  <img src="https://github-readme-stats.vercel.app/api/top-langs/?username=Kyekyeku-Tech&layout=compact&theme=vision-friendly-dark" />
+</p>
+
+---
+
+### ⭐ If you use this project, don't forget to give it a GitHub star!
