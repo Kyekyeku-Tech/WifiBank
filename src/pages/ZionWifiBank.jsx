@@ -53,53 +53,52 @@ export default function ZionWifiBank() {
 
   const formatGhs = x => `GHS ${Number(x).toFixed(2)}`;
 
-  // -------------------------------
-  //  TICKET GENERATOR (PDF + JPG)
-  // -------------------------------
-  const generateTicket = (details) => {
-    const { reference, pkg, username } = details;
+  const generateTicket = ({ reference, pkg, username, password }) => {
+  // PDF version
+  const docPDF = new jsPDF();
+  docPDF.setFontSize(18);
+  docPDF.text("Chidiz WiFi Bank – Access Ticket", 20, 20);
 
-    const docPDF = new jsPDF();
-    docPDF.setFontSize(18);
-    docPDF.text("Chidiz WiFi Bank – Access Ticket", 20, 20);
+  docPDF.setFontSize(12);
+  docPDF.text(`Name: ${name}`, 20, 40);
+  docPDF.text(`Phone: ${phone}`, 20, 50);
+  docPDF.text(`Package: ${pkg.name}`, 20, 60);
+  docPDF.text(`Username: ${username}`, 20, 70);
+  docPDF.text(`Password: ${password}`, 20, 80);
+  docPDF.text(`Reference: ${reference}`, 20, 90);
+  docPDF.text(`Date: ${new Date().toLocaleString()}`, 20, 100);
 
-    docPDF.setFontSize(12);
-    docPDF.text(`Name: ${name}`, 20, 40);
-    docPDF.text(`Phone: ${phone}`, 20, 50);
-    docPDF.text(`Package: ${pkg.name}`, 20, 60);
-    docPDF.text(`Username: ${username}`, 20, 70);
-    docPDF.text(`Reference: ${reference}`, 20, 80);
-    docPDF.text(`Date: ${new Date().toLocaleString()}`, 20, 90);
+  docPDF.save(`Ticket-${reference}.pdf`);
 
-    docPDF.save(`Ticket-${reference}.pdf`);
+  // JPG version
+  const canvas = document.createElement("canvas");
+  canvas.width = 700;
+  canvas.height = 400;
+  const ctx = canvas.getContext("2d");
 
-    // JPG VERSION
-    const canvas = document.createElement("canvas");
-    canvas.width = 700;
-    canvas.height = 400;
-    const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#1e293b";
+  ctx.fillRect(0, 0, 700, 400);
 
-    ctx.fillStyle = "#1e293b";
-    ctx.fillRect(0, 0, 700, 400);
+  ctx.fillStyle = "white";
+  ctx.font = "28px Arial";
+  ctx.fillText("Chidiz WiFi Bank Ticket", 150, 50);
 
-    ctx.fillStyle = "white";
-    ctx.font = "28px Arial";
-    ctx.fillText("Chidiz WiFi Bank Ticket", 180, 50);
+  ctx.font = "20px Arial";
+  ctx.fillText(`Name: ${name}`, 50, 120);
+  ctx.fillText(`Phone: ${phone}`, 50, 160);
+  ctx.fillText(`Package: ${pkg.name}`, 50, 200);
+  ctx.fillText(`Username: ${username}`, 50, 240);
+  ctx.fillText(`Password: ${password}`, 50, 280);
+  ctx.fillText(`Reference: ${reference}`, 50, 320);
 
-    ctx.font = "20px Arial";
-    ctx.fillText(`Name: ${name}`, 50, 120);
-    ctx.fillText(`Phone: ${phone}`, 50, 160);
-    ctx.fillText(`Package: ${pkg.name}`, 50, 200);
-    ctx.fillText(`Username: ${username}`, 50, 240);
-    ctx.fillText(`Reference: ${reference}`, 50, 280);
+  const jpgURL = canvas.toDataURL("image/jpeg");
 
-    const jpgURL = canvas.toDataURL("image/jpeg");
+  const a = document.createElement("a");
+  a.href = jpgURL;
+  a.download = `Ticket-${reference}.jpg`;
+  a.click();
+};
 
-    const a = document.createElement("a");
-    a.href = jpgURL;
-    a.download = `Ticket-${reference}.jpg`;
-    a.click();
-  };
 
   // -------------------------------
   // PAYMENT SUCCESS HANDLER
@@ -140,51 +139,57 @@ export default function ZionWifiBank() {
   };
 
   const handlePaymentSuccess = async (reference, pkg) => {
-    setProcessing(true);
-    try {
-      const snap = await getDocs(
-        query(collection(db, "credentials"), where("packageId", "==", pkg.id), where("used", "==", false))
-      );
-      if (snap.empty) {
-        alert("Payment succeeded but no credentials available.");
-        return;
-      }
-
-      const credDoc = snap.docs[0];
-      const credData = credDoc.data();
-
-      await updateDoc(doc(db, "credentials", credDoc.id), {
-        used: true,
-        assignedTo: phone,
-        assignedAt: new Date(),
-      });
-
-      await addDoc(collection(db, "transactions"), {
-        reference,
-        packageId: pkg.id,
-        name,
-        phone,
-        amount: pkg.price,
-        username: credData.username,
-        assignedAt: new Date(),
-      });
-
-      alert(`Payment succeeded! Downloading your ticket.`);
-      
-      // Generate ticket (PDF + JPG)
-      generateTicket({
-        reference,
-        pkg,
-        username: credData.username
-      });
-
-    } catch (err) {
-      console.error(err);
-      alert("Payment succeeded but credential assignment failed.");
-    } finally {
-      setProcessing(false);
+  setProcessing(true);
+  try {
+    // Get first unused credential for this package
+    const snap = await getDocs(
+      query(collection(db, "credentials"), where("packageId", "==", pkg.id), where("used", "==", false))
+    );
+    if (snap.empty) {
+      alert("Payment succeeded but no credentials available.");
+      return;
     }
-  };
+
+    const credDoc = snap.docs[0];
+    const credData = credDoc.data();
+
+    // Mark credential as used and assign to this user
+    await updateDoc(doc(db, "credentials", credDoc.id), {
+      used: true,
+      assignedTo: phone,
+      assignedAt: new Date(),
+    });
+
+    // Save transaction
+    await addDoc(collection(db, "transactions"), {
+      reference,
+      packageId: pkg.id,
+      name,
+      phone,
+      amount: pkg.price,
+      username: credData.username,
+      password: credData.password,
+      assignedAt: new Date(),
+    });
+
+    alert(`Payment succeeded! Downloading your ticket.`);
+
+    // Generate ticket with username & password
+    generateTicket({
+      reference,
+      pkg,
+      username: credData.username,
+      password: credData.password,
+    });
+
+  } catch (err) {
+    console.error(err);
+    alert("Payment succeeded but credential assignment failed.");
+  } finally {
+    setProcessing(false);
+  }
+};
+
 
   // Dynamic theme classes
   const containerClass =
