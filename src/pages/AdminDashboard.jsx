@@ -578,7 +578,7 @@ export default function AdminDashboard() {
           </label>
           <p className="text-sm mb-2 text-slate-400">
             Paste lines like: <code>username,password</code> or{" "}
-            <code>username,password,packageId,description</code>
+            <code>username,password,packageId</code>
           </p>
 
           <textarea
@@ -634,7 +634,7 @@ export default function AdminDashboard() {
             <p className="text-sm mb-2 text-slate-400">
               Upload a CSV file from your device. Format:
               <code>username,password</code> or{" "}
-              <code>username,password,packageId,description</code>
+              <code>username,password,packageId</code>
             </p>
 
             <input
