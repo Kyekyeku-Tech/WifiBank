@@ -17,6 +17,9 @@ export default function ZionWifiBank() {
 
   const PAYSTACK_KEY = import.meta.env?.VITE_PAYSTACK_KEY || process.env.REACT_APP_PAYSTACK_KEY;
 
+  const apiKey = "8KXVafxA7gnSFivj2T1Shoo97"; 
+  const senderId = "Chidiz Hub";
+
   // Toggle theme
   const toggleTheme = () => setTheme(theme === "dark" ? "light" : "dark");
 
@@ -27,7 +30,7 @@ export default function ZionWifiBank() {
         const snap = await getDocs(collection(db, "packages"));
         const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         const pkgs = docs.length ? docs : [
-          { id: "bronze-1w", name: "Bronze — 1 Week", price: 20, description: "1 Week Unlimited" },
+          { id: "bronze-1w", name: "Bronze — 1 Week", price: 2, description: "1 Week Unlimited" },
           { id: "silver-2w", name: "Silver — 2 Weeks", price: 40, description: "2 Weeks Unlimited" },
           { id: "gold-3w", name: "Gold — 3 Weeks", price: 60, description: "3 Weeks Unlimited" },
           { id: "vip-1m", name: "Platinum — 1 Month", price: 90, description: "1 Month, 2 devices" },
@@ -54,51 +57,50 @@ export default function ZionWifiBank() {
   const formatGhs = x => `GHS ${Number(x).toFixed(2)}`;
 
   const generateTicket = ({ reference, pkg, username, password }) => {
-  // PDF version
-  const docPDF = new jsPDF();
-  docPDF.setFontSize(18);
-  docPDF.text("Starlink WiFi Bank – Access Ticket", 20, 20);
+    // PDF version
+    const docPDF = new jsPDF();
+    docPDF.setFontSize(18);
+    docPDF.text("Starlink WiFi Bank – Access Ticket", 20, 20);
 
-  docPDF.setFontSize(12);
-  docPDF.text(`Name: ${name}`, 20, 40);
-  docPDF.text(`Phone: ${phone}`, 20, 50);
-  docPDF.text(`Package: ${pkg.name}`, 20, 60);
-  docPDF.text(`Username: ${username}`, 20, 70);
-  docPDF.text(`Password: ${password}`, 20, 80);
-  docPDF.text(`Reference: ${reference}`, 20, 90);
-  docPDF.text(`Date: ${new Date().toLocaleString()}`, 20, 100);
+    docPDF.setFontSize(12);
+    docPDF.text(`Name: ${name}`, 20, 40);
+    docPDF.text(`Phone: ${phone}`, 20, 50);
+    docPDF.text(`Package: ${pkg.name}`, 20, 60);
+    docPDF.text(`Username: ${username}`, 20, 70);
+    docPDF.text(`Password: ${password}`, 20, 80);
+    docPDF.text(`Reference: ${reference}`, 20, 90);
+    docPDF.text(`Date: ${new Date().toLocaleString()}`, 20, 100);
 
-  docPDF.save(`Ticket-${reference}.pdf`);
+    docPDF.save(`Ticket-${reference}.pdf`);
 
-  // JPG version
-  const canvas = document.createElement("canvas");
-  canvas.width = 700;
-  canvas.height = 400;
-  const ctx = canvas.getContext("2d");
+    // JPG version
+    const canvas = document.createElement("canvas");
+    canvas.width = 700;
+    canvas.height = 400;
+    const ctx = canvas.getContext("2d");
 
-  ctx.fillStyle = "#1e293b";
-  ctx.fillRect(0, 0, 700, 400);
+    ctx.fillStyle = "#1e293b";
+    ctx.fillRect(0, 0, 700, 400);
 
-  ctx.fillStyle = "white";
-  ctx.font = "28px Arial";
-  ctx.fillText("Starlink WiFi Bank Ticket", 150, 50);
+    ctx.fillStyle = "white";
+    ctx.font = "28px Arial";
+    ctx.fillText("Starlink WiFi Bank Ticket", 150, 50);
 
-  ctx.font = "20px Arial";
-  ctx.fillText(`Name: ${name}`, 50, 120);
-  ctx.fillText(`Phone: ${phone}`, 50, 160);
-  ctx.fillText(`Package: ${pkg.name}`, 50, 200);
-  ctx.fillText(`Username: ${username}`, 50, 240);
-  ctx.fillText(`Password: ${password}`, 50, 280);
-  ctx.fillText(`Reference: ${reference}`, 50, 320);
+    ctx.font = "20px Arial";
+    ctx.fillText(`Name: ${name}`, 50, 120);
+    ctx.fillText(`Phone: ${phone}`, 50, 160);
+    ctx.fillText(`Package: ${pkg.name}`, 50, 200);
+    ctx.fillText(`Username: ${username}`, 50, 240);
+    ctx.fillText(`Password: ${password}`, 50, 280);
+    ctx.fillText(`Reference: ${reference}`, 50, 320);
 
-  const jpgURL = canvas.toDataURL("image/jpeg");
+    const jpgURL = canvas.toDataURL("image/jpeg");
 
-  const a = document.createElement("a");
-  a.href = jpgURL;
-  a.download = `Ticket-${reference}.jpg`;
-  a.click();
-};
-
+    const a = document.createElement("a");
+    a.href = jpgURL;
+    a.download = `Ticket-${reference}.jpg`;
+    a.click();
+  };
 
   // -------------------------------
   // PAYMENT SUCCESS HANDLER
@@ -139,57 +141,91 @@ export default function ZionWifiBank() {
   };
 
   const handlePaymentSuccess = async (reference, pkg) => {
-  setProcessing(true);
-  try {
-    // Get first unused credential for this package
-    const snap = await getDocs(
-      query(collection(db, "credentials"), where("packageId", "==", pkg.id), where("used", "==", false))
-    );
-    if (snap.empty) {
-      alert("Payment succeeded but no credentials available.");
-      return;
-    }
+    setProcessing(true);
+    try {
+      // Get first unused credential for this package
+      const snap = await getDocs(
+        query(collection(db, "credentials"), where("packageId", "==", pkg.id), where("used", "==", false))
+      );
+      if (snap.empty) {
+        alert("Payment succeeded but no credentials available.");
+        return;
+      }
 
-    const credDoc = snap.docs[0];
-    const credData = credDoc.data();
+      const credDoc = snap.docs[0];
+      const credData = credDoc.data();
 
-    // Mark credential as used and assign to this user
-    await updateDoc(doc(db, "credentials", credDoc.id), {
-      used: true,
-      assignedTo: phone,
-      assignedAt: new Date(),
-    });
+      // Mark credential as used and assign to this user
+      await updateDoc(doc(db, "credentials", credDoc.id), {
+        used: true,
+        assignedTo: phone,
+        assignedAt: new Date(),
+      });
 
-    // Save transaction
-    await addDoc(collection(db, "transactions"), {
-      reference,
-      packageId: pkg.id,
-      name,
-      phone,
-      amount: pkg.price,
-      username: credData.username,
-      password: credData.password,
-      assignedAt: new Date(),
-    });
+      // Save transaction
+      await addDoc(collection(db, "transactions"), {
+        reference,
+        packageId: pkg.id,
+        name,
+        phone,
+        amount: pkg.price,
+        username: credData.username,
+        password: credData.password,
+        assignedAt: new Date(),
+      });
 
-    alert(`Payment succeeded! Downloading your ticket.`);
+      // -------------------------------
+// SEND SMS NOTIFICATION USING MNOTIFY POST
+// -------------------------------
+try {
+  const smsMessage = `Hello ${name}, your WiFi access is ready!
+Package: ${pkg.name}
+Username: ${credData.username}
+Password: ${credData.password}
+Reference: ${reference}
+Thank you for choosing Starlink WiFi Bank.`;
 
-    // Generate ticket with username & password
-    generateTicket({
-      reference,
-      pkg,
-      username: credData.username,
-      password: credData.password,
-    });
+  const response = await fetch(`https://api.mnotify.com/api/sms/quick?key=${apiKey}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      recipient: [phone],      // array of phone numbers
+      sender: senderId,        // up to 11 chars
+      message: smsMessage,
+      is_schedule: false,
+      schedule_date: ""
+    })
+  });
 
-  } catch (err) {
-    console.error(err);
-    alert("Payment succeeded but credential assignment failed.");
-  } finally {
-    setProcessing(false);
+  const data = await response.json();
+  if (data.status === "success") {
+    console.log("SMS sent successfully!", data.summary);
+  } else {
+    console.error("SMS failed:", data);
   }
-};
+} catch (smsErr) {
+  console.error("SMS error:", smsErr);
+}
 
+      alert(`Payment succeeded! Downloading your ticket.`);
+
+      // Generate ticket with username & password
+      generateTicket({
+        reference,
+        pkg,
+        username: credData.username,
+        password: credData.password,
+      });
+
+    } catch (err) {
+      console.error(err);
+      alert("Payment succeeded but credential assignment failed.");
+    } finally {
+      setProcessing(false);
+    }
+  };
 
   // Dynamic theme classes
   const containerClass =
