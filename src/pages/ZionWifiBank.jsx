@@ -120,7 +120,7 @@ export default function ZionWifiBank() {
         const pkgs = docs.length
           ? docs
           : [
-              { id: "bronze-1w", name: "Bronze — 1 Week", price: 2, description: "1 Week Unlimited" },
+              { id: "bronze-1w", name: "Bronze — 1 Week", price: 20, description: "1 Week Unlimited" },
               { id: "silver-2w", name: "Silver — 2 Weeks", price: 40, description: "2 Weeks Unlimited" },
               { id: "gold-3w", name: "Gold — 3 Weeks", price: 60, description: "3 Weeks Unlimited" },
               { id: "vip-1m", name: "Platinum — 1 Month", price: 90, description: "1 Month, 2 devices Unlimited" },
