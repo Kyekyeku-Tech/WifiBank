@@ -12,6 +12,10 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 
+// Full, cleaned, and working AdminDashboard.jsx
+// Preserves all your original features (CSV upload, filters, pagination, theme, mobile menu,
+// credential add/reset/delete, transactions list/delete/deleteAll, stats, etc.)
+
 export default function AdminDashboard() {
   // Data
   const [credentials, setCredentials] = useState([]);
@@ -67,38 +71,53 @@ export default function AdminDashboard() {
     return unsubscribe;
   }, [navigate]);
 
-  // Load credentials
-  useEffect(() => {
-    const loadCreds = async () => {
-      try {
-        const snap = await getDocs(collection(db, "credentials"));
-        setCredentials(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoadingCreds(false);
-      }
-    };
-    loadCreds();
-  }, []);
+  // Fetch helpers
+  const fetchCredentials = async () => {
+    setLoadingCreds(true);
+    try {
+      const snap = await getDocs(collection(db, "credentials"));
+      setCredentials(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    } catch (err) {
+      console.error("fetchCredentials error:", err);
+    } finally {
+      setLoadingCreds(false);
+    }
+  };
 
-  // Load transactions (collection name confirmed as "MtnTransactions")
+  const fetchTransactions = async () => {
+    setLoadingTrans(true);
+    try {
+      const snap = await getDocs(collection(db, "MtnTransactions"));
+      setTransactions(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    } catch (err) {
+      console.error("fetchTransactions error:", err);
+    } finally {
+      setLoadingTrans(false);
+    }
+  };
+
+  // Load on mount
   useEffect(() => {
-    const loadTransactions = async () => {
-      try {
-        const snap = await getDocs(collection(db, "MtnTransactions"));
-        setTransactions(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoadingTrans(false);
-      }
-    };
-    loadTransactions();
+    fetchCredentials();
+    fetchTransactions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const toggleTheme = () => {
     setTheme((prev) => (prev === "dark" ? "light" : "dark"));
+  };
+
+  // Utility: format many timestamp shapes safely
+  const formatTimestamp = (t) => {
+    if (!t) return "-";
+    // Firestore Timestamp
+    if (t.seconds) return new Date(t.seconds * 1000).toLocaleString();
+    // JS Date object
+    if (t.toDate) return t.toDate().toLocaleString();
+    // ISO / string
+    const d = new Date(t);
+    if (!isNaN(d)) return d.toLocaleString();
+    return "-";
   };
 
   // Credential & Transaction functions
@@ -118,8 +137,7 @@ export default function AdminDashboard() {
       setUsername("");
       setPassword("");
       setDescription("");
-      const snap = await getDocs(collection(db, "credentials"));
-      setCredentials(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      await fetchCredentials();
       alert("Credential added successfully!");
     } catch (err) {
       console.error(err);
@@ -147,9 +165,7 @@ export default function AdminDashboard() {
         assignedTo: null,
       });
       setCredentials((prev) =>
-        prev.map((c) =>
-          c.id === id ? { ...c, used: false, assignedTo: null } : c
-        )
+        prev.map((c) => (c.id === id ? { ...c, used: false, assignedTo: null } : c))
       );
     } catch (err) {
       console.error(err);
@@ -169,8 +185,7 @@ export default function AdminDashboard() {
   };
 
   const deleteAllTransactions = async () => {
-    if (!window.confirm("Delete ALL transactions? This cannot be undone!"))
-      return;
+    if (!window.confirm("Delete ALL transactions? This cannot be undone!")) return;
     try {
       const snap = await getDocs(collection(db, "MtnTransactions"));
       const deletePromises = snap.docs.map((d) => deleteDoc(d.ref));
@@ -203,12 +218,12 @@ export default function AdminDashboard() {
     const reader = new FileReader();
     reader.onload = async (event) => {
       const text = String(event.target.result || "");
-      const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+      // split lines robustly for different OS
+      const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
 
       // If first line looks like a header (contains "username" and "password"), skip it
       const first = lines[0] || "";
-      const startIndex =
-        /username/i.test(first) && /password/i.test(first) ? 1 : 0;
+      const startIndex = /username/i.test(first) && /password/i.test(first) ? 1 : 0;
 
       const rows = [];
       const errors = [];
@@ -261,8 +276,7 @@ export default function AdminDashboard() {
         await Promise.all(promises);
 
         // refresh credentials
-        const snap = await getDocs(collection(db, "credentials"));
-        setCredentials(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        await fetchCredentials();
 
         if (errors.length) setCsvErrors(errors);
         else setCsvErrors([]);
@@ -293,9 +307,7 @@ export default function AdminDashboard() {
       : "bg-white/70 border border-gray-400 rounded-2xl p-6 shadow-md mb-10";
 
   const tableClass =
-    theme === "dark"
-      ? "w-full text-left text-sm text-slate-200"
-      : "w-full text-left text-sm text-gray-800";
+    theme === "dark" ? "w-full text-left text-sm text-slate-200" : "w-full text-left text-sm text-gray-800";
 
   // --------------------------
   // Derived / filtered data & stats
@@ -306,19 +318,11 @@ export default function AdminDashboard() {
 
   // Credentials filtering
   const filteredCredentials = credentials
+    .filter((c) => (credPackageFilter ? c.packageId === credPackageFilter : true))
     .filter((c) =>
-      credPackageFilter ? c.packageId === credPackageFilter : true
+      credUsedFilter === "all" ? true : credUsedFilter === "used" ? !!c.used : !c.used
     )
-    .filter((c) =>
-      credUsedFilter === "all"
-        ? true
-        : credUsedFilter === "used"
-        ? !!c.used
-        : !c.used
-    )
-    .filter((c) =>
-      credSearch ? c.username.toLowerCase().includes(credSearch.toLowerCase()) : true
-    );
+    .filter((c) => (credSearch ? c.username.toLowerCase().includes(credSearch.toLowerCase()) : true));
 
   const credTotalPages = Math.max(1, Math.ceil(filteredCredentials.length / credItemsPerPage));
   const credCurrentSlice = filteredCredentials.slice(
@@ -369,9 +373,7 @@ export default function AdminDashboard() {
           <button
             onClick={toggleTheme}
             className={`px-4 py-2 rounded-full font-semibold transition-all ${
-              theme === "dark"
-                ? "bg-gray-700 text-white hover:bg-gray-600"
-                : "bg-gray-300 text-black hover:bg-gray-200"
+              theme === "dark" ? "bg-gray-700 text-white hover:bg-gray-600" : "bg-gray-300 text-black hover:bg-gray-200"
             }`}
           >
             {theme === "dark" ? "Light Mode" : "Dark Mode"}
@@ -457,11 +459,7 @@ export default function AdminDashboard() {
       )}
 
       {/* Mini Dashboard Stats */}
-      <motion.section
-        className={sectionClass}
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
+      <motion.section className={sectionClass} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
             <h3 className="text-sm font-semibold text-slate-300">🟩 Total Credentials</h3>
@@ -484,16 +482,8 @@ export default function AdminDashboard() {
       </motion.section>
 
       {/* Add Credential Section */}
-      <motion.section
-        className={sectionClass}
-        initial={{ opacity: 0, y: 15 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
-        <h2
-          className={`text-2xl font-semibold mb-4 ${
-            theme === "dark" ? "text-sky-400" : "text-blue-600"
-          }`}
-        >
+      <motion.section className={sectionClass} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}>
+        <h2 className={`text-2xl font-semibold mb-4 ${theme === "dark" ? "text-sky-400" : "text-blue-600"}`}>
           Add Credential
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -577,12 +567,7 @@ export default function AdminDashboard() {
              <code>username,password,packageId</code>
           </p>
 
-          <input
-            type="file"
-            accept=".csv,text/csv"
-            onChange={handleCSVUpload}
-            className="p-2 rounded border bg-transparent"
-          />
+          <input type="file" accept=".csv,text/csv" onChange={handleCSVUpload} className="p-2 rounded border bg-transparent" />
 
           {/* CSV Errors */}
           {csvErrors.length > 0 && (
@@ -599,17 +584,9 @@ export default function AdminDashboard() {
       </motion.section>
 
       {/* Credentials Table with Filters & Pagination */}
-      <motion.section
-        className={sectionClass}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-      >
+      <motion.section className={sectionClass} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
-          <h2
-            className={`text-2xl font-semibold ${
-              theme === "dark" ? "text-sky-400" : "text-blue-600"
-            }`}
-          >
+          <h2 className={`text-2xl font-semibold ${theme === "dark" ? "text-sky-400" : "text-blue-600"}`}>
             All Credentials
           </h2>
 
@@ -622,9 +599,7 @@ export default function AdminDashboard() {
                 setCredCurrentPage(1);
               }}
               className={`p-2 rounded-lg outline-none w-48 ${
-                theme === "dark"
-                  ? "bg-gray-900/60 border border-slate-700 text-white"
-                  : "bg-white border border-gray-400 text-black"
+                theme === "dark" ? "bg-gray-900/60 border border-slate-700 text-white" : "bg-white border border-gray-400 text-black"
               }`}
             />
 
@@ -635,9 +610,7 @@ export default function AdminDashboard() {
                 setCredCurrentPage(1);
               }}
               className={`p-2 rounded-lg outline-none ${
-                theme === "dark"
-                  ? "bg-gray-900/60 border border-slate-700 text-white"
-                  : "bg-white border border-gray-400 text-black"
+                theme === "dark" ? "bg-gray-900/60 border border-slate-700 text-white" : "bg-white border border-gray-400 text-black"
               }`}
             >
               <option value="">All packages</option>
@@ -655,9 +628,7 @@ export default function AdminDashboard() {
                 setCredCurrentPage(1);
               }}
               className={`p-2 rounded-lg outline-none ${
-                theme === "dark"
-                  ? "bg-gray-900/60 border border-slate-700 text-white"
-                  : "bg-white border border-gray-400 text-black"
+                theme === "dark" ? "bg-gray-900/60 border border-slate-700 text-white" : "bg-white border border-gray-400 text-black"
               }`}
             >
               <option value="all">All</option>
@@ -668,20 +639,12 @@ export default function AdminDashboard() {
         </div>
 
         {loadingCreds ? (
-          <p className={theme === "dark" ? "text-slate-400" : "text-gray-700"}>
-            Loading credentials...
-          </p>
+          <p className={theme === "dark" ? "text-slate-400" : "text-gray-700"}>Loading credentials...</p>
         ) : (
           <>
             <div className="overflow-x-auto">
               <table className={tableClass}>
-                <thead
-                  className={
-                    theme === "dark"
-                      ? "border-b border-slate-600 text-slate-300"
-                      : "border-b border-gray-400 text-gray-700"
-                  }
-                >
+                <thead className={theme === "dark" ? "border-b border-slate-600 text-slate-300" : "border-b border-gray-400 text-gray-700"}>
                   <tr>
                     <th className="px-3 py-2">Username</th>
                     <th className="px-3 py-2">Password</th>
@@ -695,11 +658,7 @@ export default function AdminDashboard() {
                   {credCurrentSlice.map((c) => (
                     <motion.tr
                       key={c.id}
-                      className={
-                        theme === "dark"
-                          ? "border-b border-slate-700 hover:bg-slate-700/40"
-                          : "border-b border-gray-400 hover:bg-gray-200"
-                      }
+                      className={theme === "dark" ? "border-b border-slate-700 hover:bg-slate-700/40" : "border-b border-gray-400 hover:bg-gray-200"}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                     >
@@ -709,16 +668,10 @@ export default function AdminDashboard() {
                       <td className="px-3 py-2">{c.used ? "Yes" : "No"}</td>
                       <td className="px-3 py-2">{c.assignedTo || "-"}</td>
                       <td className="px-3 py-2 text-right space-x-2">
-                        <button
-                          onClick={() => resetCredential(c.id)}
-                          className="bg-yellow-400 text-black px-3 py-1 rounded hover:bg-yellow-300 text-xs font-semibold"
-                        >
+                        <button onClick={() => resetCredential(c.id)} className="bg-yellow-400 text-black px-3 py-1 rounded hover:bg-yellow-300 text-xs font-semibold">
                           Reset
                         </button>
-                        <button
-                          onClick={() => deleteCredential(c.id)}
-                          className="bg-red-600 px-3 py-1 rounded hover:bg-red-500 text-xs font-semibold"
-                        >
+                        <button onClick={() => deleteCredential(c.id)} className="bg-red-600 px-3 py-1 rounded hover:bg-red-500 text-xs font-semibold">
                           Delete
                         </button>
                       </td>
@@ -731,11 +684,7 @@ export default function AdminDashboard() {
             {/* Credentials Pagination */}
             {credTotalPages > 1 && (
               <div className="flex justify-center items-center gap-4 mt-4">
-                <button
-                  onClick={() => setCredCurrentPage((prev) => Math.max(prev - 1, 1))}
-                  disabled={credCurrentPage === 1}
-                  className="px-4 py-2 bg-slate-700 rounded-full hover:bg-slate-600 disabled:opacity-40"
-                >
+                <button onClick={() => setCredCurrentPage((prev) => Math.max(prev - 1, 1))} disabled={credCurrentPage === 1} className="px-4 py-2 bg-slate-700 rounded-full hover:bg-slate-600 disabled:opacity-40">
                   Prev
                 </button>
 
@@ -743,13 +692,7 @@ export default function AdminDashboard() {
                   Page {credCurrentPage} of {credTotalPages}
                 </span>
 
-                <button
-                  onClick={() =>
-                    setCredCurrentPage((prev) => Math.min(prev + 1, credTotalPages))
-                  }
-                  disabled={credCurrentPage === credTotalPages}
-                  className="px-4 py-2 bg-slate-700 rounded-full hover:bg-slate-600 disabled:opacity-40"
-                >
+                <button onClick={() => setCredCurrentPage((prev) => Math.min(prev + 1, credTotalPages))} disabled={credCurrentPage === credTotalPages} className="px-4 py-2 bg-slate-700 rounded-full hover:bg-slate-600 disabled:opacity-40">
                   Next
                 </button>
               </div>
@@ -759,23 +702,12 @@ export default function AdminDashboard() {
       </motion.section>
 
       {/* Transactions Table with package filter & pagination */}
-      <motion.section
-        className={sectionClass}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-      >
+      <motion.section className={sectionClass} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
         <div className="flex justify-between items-center mb-4">
-          <h2
-            className={`text-2xl font-semibold ${
-              theme === "dark" ? "text-sky-400" : "text-blue-600"
-            }`}
-          >
+          <h2 className={`text-2xl font-semibold ${theme === "dark" ? "text-sky-400" : "text-blue-600"}`}>
             Transactions
           </h2>
-          <button
-            onClick={deleteAllTransactions}
-            className="bg-red-600 px-4 py-2 rounded-full text-sm font-semibold hover:bg-red-500 transition-all"
-          >
+          <button onClick={deleteAllTransactions} className="bg-red-600 px-4 py-2 rounded-full text-sm font-semibold hover:bg-red-500 transition-all">
             Delete All
           </button>
         </div>
@@ -788,9 +720,7 @@ export default function AdminDashboard() {
               setTransCurrentPage(1);
             }}
             className={`p-2 rounded-lg outline-none ${
-              theme === "dark"
-                ? "bg-gray-900/60 border border-slate-700 text-white"
-                : "bg-white border border-gray-400 text-black"
+              theme === "dark" ? "bg-gray-900/60 border border-slate-700 text-white" : "bg-white border border-gray-400 text-black"
             }`}
           >
             <option value="">All packages</option>
@@ -803,20 +733,12 @@ export default function AdminDashboard() {
         </div>
 
         {loadingTrans ? (
-          <p className={theme === "dark" ? "text-slate-400" : "text-gray-700"}>
-            Loading transactions...
-          </p>
+          <p className={theme === "dark" ? "text-slate-400" : "text-gray-700"}>Loading transactions...</p>
         ) : (
           <>
             <div className="overflow-x-auto">
               <table className={tableClass}>
-                <thead
-                  className={
-                    theme === "dark"
-                      ? "border-b border-slate-600 text-slate-300"
-                      : "border-b border-gray-400 text-gray-700"
-                  }
-                >
+                <thead className={theme === "dark" ? "border-b border-slate-600 text-slate-300" : "border-b border-gray-400 text-gray-700"}>
                   <tr>
                     <th className="px-3 py-2">Name</th>
                     <th className="px-3 py-2">Phone</th>
@@ -831,11 +753,7 @@ export default function AdminDashboard() {
                   {transCurrentSlice.map((t) => (
                     <motion.tr
                       key={t.id}
-                      className={
-                        theme === "dark"
-                          ? "border-b border-slate-700 hover:bg-slate-700/40"
-                          : "border-b border-gray-400 hover:bg-gray-200"
-                      }
+                      className={theme === "dark" ? "border-b border-slate-700 hover:bg-slate-700/40" : "border-b border-gray-400 hover:bg-gray-200"}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                     >
@@ -844,16 +762,9 @@ export default function AdminDashboard() {
                       <td className="px-3 py-2">{t.packageId}</td>
                       <td className="px-3 py-2">GHS {t.amount}</td>
                       <td className="px-3 py-2">{t.username}</td>
-                      <td className="px-3 py-2">
-                        {t.assignedAt?.seconds
-                          ? new Date(t.assignedAt.seconds * 1000).toLocaleString()
-                          : "-"}
-                      </td>
+                      <td className="px-3 py-2">{formatTimestamp(t.assignedAt || t.createdAt || t.timestamp || t.date)}</td>
                       <td className="px-3 py-2 text-right">
-                        <button
-                          onClick={() => deleteTransaction(t.id)}
-                          className="bg-red-600 px-3 py-1 rounded hover:bg-red-500 text-xs font-semibold"
-                        >
+                        <button onClick={() => deleteTransaction(t.id)} className="bg-red-600 px-3 py-1 rounded hover:bg-red-500 text-xs font-semibold">
                           Delete
                         </button>
                       </td>
@@ -866,11 +777,7 @@ export default function AdminDashboard() {
             {/* Transactions Pagination */}
             {transTotalPages > 1 && (
               <div className="flex justify-center items-center gap-4 mt-4">
-                <button
-                  onClick={() => setTransCurrentPage((prev) => Math.max(prev - 1, 1))}
-                  disabled={transCurrentPage === 1}
-                  className="px-4 py-2 bg-slate-700 rounded-full hover:bg-slate-600 disabled:opacity-40"
-                >
+                <button onClick={() => setTransCurrentPage((prev) => Math.max(prev - 1, 1))} disabled={transCurrentPage === 1} className="px-4 py-2 bg-slate-700 rounded-full hover:bg-slate-600 disabled:opacity-40">
                   Prev
                 </button>
 
@@ -878,13 +785,7 @@ export default function AdminDashboard() {
                   Page {transCurrentPage} of {transTotalPages}
                 </span>
 
-                <button
-                  onClick={() =>
-                    setTransCurrentPage((prev) => Math.min(prev + 1, transTotalPages))
-                  }
-                  disabled={transCurrentPage === transTotalPages}
-                  className="px-4 py-2 bg-slate-700 rounded-full hover:bg-slate-600 disabled:opacity-40"
-                >
+                <button onClick={() => setTransCurrentPage((prev) => Math.min(prev + 1, transTotalPages))} disabled={transCurrentPage === transTotalPages} className="px-4 py-2 bg-slate-700 rounded-full hover:bg-slate-600 disabled:opacity-40">
                   Next
                 </button>
               </div>
