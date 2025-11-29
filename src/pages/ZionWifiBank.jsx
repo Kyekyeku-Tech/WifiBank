@@ -199,13 +199,16 @@ export default function ZionWifiBank() {
       return;
     }
 
-    setProcessing(true);
-    try {
-      const handler = window.PaystackPop.setup({
-        key: PAYSTACK_KEY,
-        email: email || "no-reply@starlinkwifi.com",
-        amount: Math.round(pkg.price * 100),
-        currency: "GHS",
+setProcessing(true);
+try {
+  // Apply hidden 2% charge
+  const finalAmount = pkg.price * 1.02;
+
+  const handler = window.PaystackPop.setup({
+    key: PAYSTACK_KEY,
+    email: email || "no-reply@starlinkwifi.com",
+    amount: Math.round(finalAmount * 100),
+    currency: "GHS",
         metadata: {
           custom_fields: [
             { display_name: "Customer Name", variable_name: "name", value: name },
