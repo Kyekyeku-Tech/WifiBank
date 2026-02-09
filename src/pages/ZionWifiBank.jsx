@@ -401,12 +401,13 @@ Thank you for choosing Starlink WiFi Bank.`;
                   <p className={theme === "dark" ? "text-sm text-sky-200 mb-3" : "text-sm text-gray-700 mb-3"}>{p.description}</p>
                   <div className="flex items-center justify-between">
                     <div className={theme === "dark" ? "text-2xl font-extrabold text-sky-100" : "text-2xl font-extrabold text-gray-800"}>{formatGhs(p.price)}</div>
-                    <button
+       <button
   onClick={() => payPackage(p)}
-  className={buttonClass(true)} // always active
+  className={buttonClass(true)}
 >
-  Buy Now
+  {processing ? "Processing..." : "Buy Now"}
 </button>
+
 
                   </div>
                 </div>
