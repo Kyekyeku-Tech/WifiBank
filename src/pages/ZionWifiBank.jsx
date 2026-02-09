@@ -192,7 +192,22 @@ export default function ZionWifiBank() {
 
   const payPackage = async (pkg) => {
     if (!phone || !name) return alert("Enter your name and phone number.");
-    if (!availability[pkg.id]) return alert(`No credentials available for ${pkg.name}.`);
+   if (!availability[pkg.id]) {
+  const msg = `Hello Admin, I want to buy the ${pkg.name} package but it shows as unavailable. Please assist me.`;
+
+  const goWhatsApp = window.confirm(
+    `${pkg.name} is currently SOLD OUT.\n\nClick OK to contact admin on WhatsApp, or Cancel to close.`
+  );
+
+  if (goWhatsApp) {
+    window.open(
+      `https://wa.me/233243767677?text=${encodeURIComponent(msg)}`,
+      "_blank"
+    );
+  }
+  return;
+}
+
 
     if (!window.PaystackPop) {
       alert("Paystack script not loaded. Include https://js.paystack.co/v1/inline.js");
@@ -386,9 +401,13 @@ Thank you for choosing Starlink WiFi Bank.`;
                   <p className={theme === "dark" ? "text-sm text-sky-200 mb-3" : "text-sm text-gray-700 mb-3"}>{p.description}</p>
                   <div className="flex items-center justify-between">
                     <div className={theme === "dark" ? "text-2xl font-extrabold text-sky-100" : "text-2xl font-extrabold text-gray-800"}>{formatGhs(p.price)}</div>
-                    <button onClick={() => payPackage(p)} disabled={!isAvailable || processing} className={buttonClass(isAvailable)}>
-                      {isAvailable ? "Pay Now" : "Sold Out"}
-                    </button>
+                    <button
+  onClick={() => payPackage(p)}
+  className={buttonClass(true)} // always active
+>
+  Buy Now
+</button>
+
                   </div>
                 </div>
               );
