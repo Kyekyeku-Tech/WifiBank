@@ -104,28 +104,43 @@ export default function ZionWifiBank() {
 
   const buildPackageCandidates = useCallback((pkg) => {
     const candidates = new Set();
-    const rawValues = [pkg?.id, pkg?.name];
+    const rawValues = [pkg?.id, pkg?.name, pkg?.description, pkg?.price];
 
     for (const raw of rawValues) {
       const normalized = normalizePackageValue(raw);
       if (normalized) candidates.add(normalized);
     }
 
-    const primary = `${pkg?.id || ""} ${pkg?.name || ""}`.toLowerCase();
+    const primary = `${pkg?.id || ""} ${pkg?.name || ""} ${pkg?.description || ""} ${pkg?.price || ""}`.toLowerCase();
+    const normalizedPrimary = normalizePackageValue(primary);
     if (primary.includes("bronze")) {
       candidates.add("bronze");
       candidates.add("bronze1week");
       candidates.add("bronze1w");
+      candidates.add("1week");
+      candidates.add("week1");
+      candidates.add("20");
+      candidates.add("ghs20");
     }
     if (primary.includes("silver")) {
       candidates.add("silver");
       candidates.add("silver2weeks");
       candidates.add("silver2w");
+      candidates.add("2weeks");
+      candidates.add("2week");
+      candidates.add("week2");
+      candidates.add("40");
+      candidates.add("ghs40");
     }
     if (primary.includes("gold")) {
       candidates.add("gold");
       candidates.add("gold3weeks");
       candidates.add("gold3w");
+      candidates.add("3weeks");
+      candidates.add("3week");
+      candidates.add("week3");
+      candidates.add("60");
+      candidates.add("ghs60");
     }
     if (primary.includes("vip") || primary.includes("platinum")) {
       candidates.add("vip");
@@ -133,6 +148,35 @@ export default function ZionWifiBank() {
       candidates.add("vip1m");
       candidates.add("platinum");
       candidates.add("platinum1month");
+      candidates.add("1month");
+      candidates.add("month1");
+      candidates.add("90");
+      candidates.add("ghs90");
+    }
+
+    if (normalizedPrimary.includes("1week") || normalizedPrimary.includes("1w") || normalizedPrimary.includes("weekly")) {
+      candidates.add("bronze");
+      candidates.add("bronze1week");
+      candidates.add("bronze1w");
+      candidates.add("1week");
+    }
+    if (normalizedPrimary.includes("2weeks") || normalizedPrimary.includes("2week") || normalizedPrimary.includes("2w")) {
+      candidates.add("silver");
+      candidates.add("silver2weeks");
+      candidates.add("silver2w");
+      candidates.add("2weeks");
+    }
+    if (normalizedPrimary.includes("3weeks") || normalizedPrimary.includes("3week") || normalizedPrimary.includes("3w")) {
+      candidates.add("gold");
+      candidates.add("gold3weeks");
+      candidates.add("gold3w");
+      candidates.add("3weeks");
+    }
+    if (normalizedPrimary.includes("1month") || normalizedPrimary.includes("monthly") || normalizedPrimary.includes("30day")) {
+      candidates.add("vip");
+      candidates.add("platinum");
+      candidates.add("vip1month");
+      candidates.add("vip1m");
     }
 
     return candidates;
@@ -224,7 +268,7 @@ export default function ZionWifiBank() {
           return isCredentialUnused(cred) && packageMatchesCandidates(cred, candidates);
         });
 
-        return found;
+        return found ? true : null;
       } catch (error) {
         if (attempt === retries) {
           return null;
