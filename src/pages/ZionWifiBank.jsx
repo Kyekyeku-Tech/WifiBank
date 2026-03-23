@@ -104,15 +104,14 @@ export default function ZionWifiBank() {
 
   const buildPackageCandidates = useCallback((pkg) => {
     const candidates = new Set();
-    const rawValues = [pkg?.id, pkg?.name, pkg?.description, pkg?.price];
+    const rawValues = [pkg?.id, pkg?.name];
 
     for (const raw of rawValues) {
       const normalized = normalizePackageValue(raw);
       if (normalized) candidates.add(normalized);
     }
 
-    const primary = `${pkg?.id || ""} ${pkg?.name || ""} ${pkg?.description || ""}`.toLowerCase();
-    const normalizedPrimary = normalizePackageValue(primary);
+    const primary = `${pkg?.id || ""} ${pkg?.name || ""}`.toLowerCase();
     if (primary.includes("bronze")) {
       candidates.add("bronze");
       candidates.add("bronze1week");
@@ -136,63 +135,8 @@ export default function ZionWifiBank() {
       candidates.add("platinum1month");
     }
 
-    if (normalizedPrimary.includes("1week") || normalizedPrimary.includes("1w") || normalizedPrimary.includes("weekly")) {
-      candidates.add("bronze");
-      candidates.add("1week");
-      candidates.add("week1");
-      candidates.add("bronze1week");
-      candidates.add("bronze1w");
-    }
-
-    if (normalizedPrimary.includes("2week") || normalizedPrimary.includes("2weeks") || normalizedPrimary.includes("2w")) {
-      candidates.add("silver");
-      candidates.add("2week");
-      candidates.add("2weeks");
-      candidates.add("week2");
-      candidates.add("silver2weeks");
-      candidates.add("silver2w");
-    }
-
-    if (normalizedPrimary.includes("3week") || normalizedPrimary.includes("3weeks") || normalizedPrimary.includes("3w")) {
-      candidates.add("gold");
-      candidates.add("3week");
-      candidates.add("3weeks");
-      candidates.add("week3");
-      candidates.add("gold3weeks");
-      candidates.add("gold3w");
-    }
-
-    if (normalizedPrimary.includes("1month") || normalizedPrimary.includes("monthly") || normalizedPrimary.includes("30day")) {
-      candidates.add("vip");
-      candidates.add("platinum");
-      candidates.add("1month");
-      candidates.add("month1");
-      candidates.add("vip1month");
-      candidates.add("vip1m");
-      candidates.add("platinum1month");
-    }
-
     return candidates;
   }, [normalizePackageValue]);
-
-  const packageIdMatches = useCallback(
-    (docPackageId, candidates) => {
-      const docPkg = normalizePackageValue(docPackageId);
-      if (!docPkg) return false;
-
-      if (candidates.has(docPkg)) return true;
-
-      for (const candidate of candidates) {
-        if (!candidate) continue;
-        if (docPkg.includes(candidate) || candidate.includes(docPkg)) {
-          return true;
-        }
-      }
-
-      return false;
-    },
-    [normalizePackageValue]
-  );
 
   const fetchWithTimeout = async (promise, timeoutMs = 12000) => {
     let timer;
@@ -207,6 +151,53 @@ export default function ZionWifiBank() {
       clearTimeout(timer);
     }
   };
+
+  const isCredentialUnused = useCallback((cred) => {
+    const used = cred?.used;
+    if (used === false || used === 0 || used === "0") return true;
+    if (used === null || typeof used === "undefined" || used === "") return true;
+    if (typeof used === "string") {
+      const val = used.trim().toLowerCase();
+      return val === "false" || val === "unused" || val === "no" || val === "notused";
+    }
+    return false;
+  }, []);
+
+  const getCredentialPackageValues = useCallback((cred) => {
+    return [
+      cred?.packageId,
+      cred?.package,
+      cred?.packageName,
+      cred?.plan,
+      cred?.type,
+      cred?.description,
+      cred?.name,
+      cred?.price,
+    ];
+  }, []);
+
+  const packageMatchesCandidates = useCallback(
+    (cred, candidates) => {
+      const packageValues = getCredentialPackageValues(cred);
+
+      for (const value of packageValues) {
+        const normalized = normalizePackageValue(value);
+        if (!normalized) continue;
+
+        if (candidates.has(normalized)) return true;
+
+        for (const candidate of candidates) {
+          if (!candidate) continue;
+          if (normalized.includes(candidate) || candidate.includes(normalized)) {
+            return true;
+          }
+        }
+      }
+
+      return false;
+    },
+    [getCredentialPackageValues, normalizePackageValue]
+  );
 
   const checkPackageAvailability = useCallback(async (pkg, retries = 2) => {
     const pkgId = pkg?.id;
@@ -225,13 +216,13 @@ export default function ZionWifiBank() {
           return true;
         }
 
-        // Fallback for mixed packageId formats in production data (e.g. Bronze, Bronze-1W, Platinum).
-        const allUnusedSnap = await fetchWithTimeout(
-          getDocs(query(collection(db, "credentials"), where("used", "==", false))),
-          12000
-        );
+        // Fallback for mixed production schemas (different package fields, used as string).
+        const allCredsSnap = await fetchWithTimeout(getDocs(collection(db, "credentials")), 12000);
 
-        const found = allUnusedSnap.docs.some((d) => packageIdMatches(d.data()?.packageId, candidates));
+        const found = allCredsSnap.docs.some((d) => {
+          const cred = d.data();
+          return isCredentialUnused(cred) && packageMatchesCandidates(cred, candidates);
+        });
 
         return found;
       } catch (error) {
@@ -242,7 +233,7 @@ export default function ZionWifiBank() {
       }
     }
     return null;
-  }, [buildPackageCandidates, packageIdMatches]);
+  }, [buildPackageCandidates, isCredentialUnused, packageMatchesCandidates]);
 
   const getFirstAvailableCredential = useCallback(async (pkg, retries = 2) => {
     const pkgId = pkg?.id;
@@ -261,12 +252,12 @@ export default function ZionWifiBank() {
           return exactSnap.docs[0];
         }
 
-        const allUnusedSnap = await fetchWithTimeout(
-          getDocs(query(collection(db, "credentials"), where("used", "==", false))),
-          12000
-        );
+        const allCredsSnap = await fetchWithTimeout(getDocs(collection(db, "credentials")), 12000);
 
-        const fallbackDoc = allUnusedSnap.docs.find((d) => packageIdMatches(d.data()?.packageId, candidates));
+        const fallbackDoc = allCredsSnap.docs.find((d) => {
+          const cred = d.data();
+          return isCredentialUnused(cred) && packageMatchesCandidates(cred, candidates);
+        });
 
         if (fallbackDoc) {
           return fallbackDoc;
@@ -281,7 +272,7 @@ export default function ZionWifiBank() {
     }
 
     return null;
-  }, [buildPackageCandidates, packageIdMatches]);
+  }, [buildPackageCandidates, isCredentialUnused, packageMatchesCandidates]);
 
   const installationItems = [
     { title: "Home Installation", price: "GHS 1,500", desc: "Standard home setup for all WiFi packages." },
