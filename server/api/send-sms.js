@@ -1,27 +1,48 @@
-// serverless function: /api/send-sms.js
-import fetch from "node-fetch";
+const express = require("express");
 
-export async function POST(req) {
+const router = express.Router();
+
+router.post("/", async (req, res) => {
   try {
-    const { recipient, message } = await req.json();
+    const { recipient, message } = req.body || {};
 
-    const MNOTIFY_KEY = process.env.MNOTIFY_KEY; // store in .env
+    if (!recipient || !message) {
+      return res.status(400).json({ success: false, error: "recipient and message are required" });
+    }
+
+    const MNOTIFY_KEY = process.env.MNOTIFY_KEY;
     const MNOTIFY_SENDER = process.env.MNOTIFY_SENDER || "ZionWifi";
 
-    const formData = new URLSearchParams();
-    formData.append("recipient", recipient);
-    formData.append("sender", MNOTIFY_SENDER);
-    formData.append("message", message);
+    if (!MNOTIFY_KEY) {
+      return res.status(500).json({ success: false, error: "MNOTIFY_KEY is not configured" });
+    }
 
-    const res = await fetch(`https://api.mnotify.com/api/sms/quick?key=${encodeURIComponent(MNOTIFY_KEY)}`, {
-      method: "POST",
-      body: formData
-    });
+    const response = await fetch(
+      `https://api.mnotify.com/api/sms/quick?key=${encodeURIComponent(MNOTIFY_KEY)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipient: [recipient],
+          sender: MNOTIFY_SENDER,
+          message,
+          is_schedule: false,
+          schedule_date: "",
+        }),
+      }
+    );
 
-    const data = await res.json();
-    return new Response(JSON.stringify({ success: true, data }), { status: 200 });
+    const data = await response.json();
+
+    if (!response.ok) {
+      return res.status(response.status).json({ success: false, data });
+    }
+
+    return res.status(200).json({ success: true, data });
   } catch (err) {
-    console.error(err);
-    return new Response(JSON.stringify({ success: false, error: err.message }), { status: 500 });
+    console.error("send-sms error:", err);
+    return res.status(500).json({ success: false, error: err.message });
   }
-}
+});
+
+module.exports = router;

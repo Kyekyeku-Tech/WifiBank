@@ -226,6 +226,40 @@ Dist folder will be created for deployment.
 
 ---
 
+## MikroTik Deployment Checklist
+
+If the app works locally but fails when hosted via MikroTik, verify all of these:
+
+1. Run the API server for SMS on your backend host:
+
+```bash
+npm run server
+```
+
+2. Add backend environment variables in `server/.env`:
+
+```env
+PORT=5000
+MNOTIFY_KEY=your_mnotify_key
+MNOTIFY_SENDER=ZionWifi
+```
+
+3. Add frontend Paystack key in project `.env` before building:
+
+```env
+REACT_APP_PAYSTACK_KEY=pk_live_or_pk_test_xxx
+```
+
+4. Use HTTPS for production checkout. Paystack live mode will fail on plain HTTP origins.
+
+5. Add your MikroTik domain/IP origin to Firebase Authentication authorized domains.
+
+6. Ensure Firestore security rules allow your read/write paths for this app.
+
+7. Reverse-proxy `/api/*` from your web origin to the Node server so `/api/send-sms` is reachable from the React app.
+
+---
+
 ## 🤝 Contributing
 
 Pull requests are welcome. For major changes, open an issue first.

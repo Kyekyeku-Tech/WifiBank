@@ -1,3 +1,19 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Sora:wght@400;500;600;700&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+	--brand-ink: #0f172a;
+	--brand-sky: #0369a1;
+	--brand-accent: #06b6d4;
+	--brand-surface: #f8fafc;
+}
+
+body {
+	font-family: "Sora", "IBM Plex Sans", "Segoe UI", sans-serif;
+	background: var(--brand-surface);
+	color: var(--brand-ink);
+	text-rendering: optimizeLegibility;
+}

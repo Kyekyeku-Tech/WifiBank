@@ -26,8 +26,8 @@ const AutoCarousel = ({ items, theme, whatsappPrefix }) => {
 
   const cardClass =
     theme === "dark"
-      ? `p-6 rounded-2xl shadow transition transform bg-white/10 hover:-translate-y-2 flex flex-col items-center justify-center`
-      : `p-6 rounded-2xl shadow transition transform bg-gray-100 hover:-translate-y-2 flex flex-col items-center justify-center`;
+      ? "p-7 rounded-3xl shadow-xl border border-cyan-200/20 transition transform bg-slate-900/70 backdrop-blur-md hover:-translate-y-1 flex flex-col items-center justify-center"
+      : "p-7 rounded-3xl shadow-xl border border-slate-200 transition transform bg-white/90 backdrop-blur-md hover:-translate-y-1 flex flex-col items-center justify-center";
 
   return (
     <div className="overflow-hidden relative w-full h-full flex justify-center items-center">
@@ -88,9 +88,7 @@ export default function ZionWifiBank() {
   const [availability, setAvailability] = useState({});
   const [theme, setTheme] = useState("dark");
 
-  const PAYSTACK_KEY = import.meta.env?.VITE_PAYSTACK_KEY || process.env.REACT_APP_PAYSTACK_KEY;
-  const apiKey = import.meta.env?.VITE_MNOTIFY_KEY || process.env.REACT_APP_MNOTIFY_KEY || "8KXVafxA7gnSFivj2T1Shoo97";
-  const senderId = "Chidiz Hub";
+  const PAYSTACK_KEY = process.env.REACT_APP_PAYSTACK_KEY;
 
   const toggleTheme = () => setTheme(theme === "dark" ? "light" : "dark");
 
@@ -137,6 +135,9 @@ export default function ZionWifiBank() {
         setAvailability(avail);
       } catch (err) {
         console.error(err);
+        alert(
+          "Could not load database data. If this is hosted on MikroTik, make sure this origin is allowed in Firebase Auth Authorized domains and Firestore rules allow reads/writes for your app."
+        );
       } finally {
         setLoadingPackages(false);
       }
@@ -207,6 +208,19 @@ export default function ZionWifiBank() {
   }
   return;
 }
+
+    if (!PAYSTACK_KEY) {
+      alert("Paystack key is missing. Set REACT_APP_PAYSTACK_KEY in your production environment.");
+      return;
+    }
+
+    const host = window.location.hostname;
+    const isLocalHost = host === "localhost" || host === "127.0.0.1";
+    const isSecure = window.location.protocol === "https:";
+    if (!isLocalHost && !isSecure) {
+      alert("Paystack live payments require HTTPS. Use HTTPS on MikroTik or host checkout on an HTTPS domain.");
+      return;
+    }
 
 
     if (!window.PaystackPop) {
@@ -291,21 +305,19 @@ Password: ${credData.password}
 Reference: ${reference}
 Thank you for choosing Starlink WiFi Bank.`;
 
-        const response = await fetch(`https://api.mnotify.com/api/sms/quick?key=${apiKey}`, {
+        const response = await fetch("/api/send-sms", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            recipient: [phone],
-            sender: senderId,
+            recipient: phone,
             message: smsMessage,
-            is_schedule: false,
-            schedule_date: "",
           }),
         });
 
         const data = await response.json();
-        if (data.status === "success") console.log("SMS sent:", data.summary);
-        else console.error("SMS failed:", data);
+        if (!response.ok || !data.success) {
+          console.error("SMS failed:", data);
+        }
       } catch (smsErr) {
         console.error("SMS error:", smsErr);
       }
@@ -343,89 +355,202 @@ Thank you for choosing Starlink WiFi Bank.`;
 
   const containerClass =
     theme === "dark"
-      ? "min-h-screen bg-gradient-to-tr from-slate-900 via-slate-800 to-sky-700 text-white p-6"
-      : "min-h-screen bg-gradient-to-tr from-white via-gray-200 to-gray-300 text-black p-6";
+      ? "relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_10%_5%,#12365f_0%,#0b1220_40%,#05070b_100%)] text-slate-100 px-4 py-8 md:px-8"
+      : "relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_12%_4%,#d6ebff_0%,#f3f7fb_42%,#ffffff_100%)] text-slate-900 px-4 py-8 md:px-8";
 
-  const cardClass = (isAvailable) =>
+  const packageCardClass = (isAvailable) =>
     theme === "dark"
-      ? `p-6 rounded-2xl shadow transition transform ${isAvailable ? "bg-white/10 hover:-translate-y-2" : "bg-white/20 opacity-50 cursor-not-allowed"}`
-      : `p-6 rounded-2xl shadow transition transform ${isAvailable ? "bg-gray-100 hover:-translate-y-2" : "bg-gray-200 opacity-50 cursor-not-allowed"}`;
+      ? `rounded-3xl border p-6 shadow-xl transition-all duration-300 ${
+          isAvailable
+            ? "border-cyan-200/25 bg-slate-900/70 backdrop-blur-lg hover:-translate-y-1"
+            : "border-slate-700/70 bg-slate-900/45 opacity-70"
+        }`
+      : `rounded-3xl border p-6 shadow-xl transition-all duration-300 ${
+          isAvailable
+            ? "border-slate-200 bg-white/95 backdrop-blur-lg hover:-translate-y-1"
+            : "border-slate-200 bg-slate-100/85 opacity-75"
+        }`;
 
-  const inputClass = "p-2 rounded placeholder:text-slate-400 " + (theme === "dark" ? "bg-white/10 text-white" : "bg-white text-black");
+  const inputClass =
+    "h-12 rounded-xl px-4 text-sm outline-none transition placeholder:text-slate-400 " +
+    (theme === "dark"
+      ? "bg-slate-950/70 border-2 border-slate-500 text-slate-100 shadow-inner shadow-black/20 focus:border-cyan-300"
+      : "bg-white border-2 border-slate-500 text-slate-900 shadow-inner shadow-slate-300/60 focus:border-blue-700");
 
   const buttonClass = (isAvailable) =>
     isAvailable
       ? theme === "dark"
-        ? "bg-sky-600 hover:bg-sky-500 text-white px-4 py-2 rounded-full font-bold"
-        : "bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-full font-bold"
-      : theme === "dark"
-      ? "bg-gray-400 text-gray-700 cursor-not-allowed px-4 py-2 rounded-full font-bold"
-      : "bg-gray-300 text-gray-800 cursor-not-allowed px-4 py-2 rounded-full font-bold";
+        ? "w-full rounded-xl bg-cyan-500 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
+        : "w-full rounded-xl bg-blue-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-600"
+      : "w-full rounded-xl bg-slate-400 px-4 py-3 text-sm font-semibold text-slate-700 cursor-not-allowed";
 
   return (
-    <div className={containerClass}>
-      <div className="max-w-5xl mx-auto">
-        <header className="mb-8 flex flex-col md:flex-row justify-between items-center gap-4">
+    <div className={containerClass} style={{ fontFamily: "Sora, IBM Plex Sans, Segoe UI, sans-serif" }}>
+      <div
+        className={
+          theme === "dark"
+            ? "pointer-events-none absolute -top-24 -right-10 h-72 w-72 rounded-full bg-cyan-500/25 blur-3xl"
+            : "pointer-events-none absolute -top-20 -right-10 h-72 w-72 rounded-full bg-blue-300/45 blur-3xl"
+        }
+      />
+      <div
+        className={
+          theme === "dark"
+            ? "pointer-events-none absolute -bottom-24 -left-12 h-72 w-72 rounded-full bg-emerald-500/20 blur-3xl"
+            : "pointer-events-none absolute -bottom-24 -left-12 h-72 w-72 rounded-full bg-teal-200/60 blur-3xl"
+        }
+      />
+
+      <main className="relative mx-auto max-w-7xl space-y-8">
+        <header
+          className={
+            theme === "dark"
+              ? "flex flex-col gap-4 rounded-3xl border border-white/10 bg-black/10 p-5 backdrop-blur-md md:flex-row md:items-center md:justify-between"
+              : "flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white/75 p-5 backdrop-blur-md md:flex-row md:items-center md:justify-between"
+          }
+        >
           <div>
-            <h1 className={theme === "dark" ? "text-3xl font-bold text-sky-400 mb-2" : "text-3xl font-bold text-blue-600 mb-2"}>Starlink WiFi Bank</h1>
-            <p className={theme === "dark" ? "text-slate-200" : "text-gray-700"}>Fast — Unlimited — Reliable</p>
+            <div
+              className={
+                theme === "dark"
+                  ? "mb-2 inline-flex items-center rounded-full border border-cyan-300/40 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300"
+                  : "mb-2 inline-flex items-center rounded-full border border-blue-300 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-blue-700"
+              }
+            >
+              Enterprise Connectivity Portal
+            </div>
+            <h1 className={theme === "dark" ? "text-3xl font-semibold text-white md:text-4xl" : "text-3xl font-semibold text-slate-900 md:text-4xl"}>
+              Starlink WiFi Bank
+            </h1>
+            <p className={theme === "dark" ? "mt-2 text-slate-300" : "mt-2 text-slate-700"}>Reliable plans for homes, teams, and business operations.</p>
           </div>
 
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={toggleTheme}
-              className={theme === "dark" ? "bg-gray-700 text-white px-4 py-2 rounded-full hover:bg-gray-600 font-bold" : "bg-gray-300 text-black px-4 py-2 rounded-full hover:bg-gray-200 font-bold"}
+              className={theme === "dark" ? "rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700" : "rounded-xl bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-300"}
             >
-              {theme === "dark" ? "Light Mode" : "Dark Mode"}
+              {theme === "dark" ? "Light View" : "Dark View"}
             </button>
-            <a href="tel:0243767677" className="bg-yellow-400 text-slate-900 px-4 py-2 rounded-full font-bold hover:bg-yellow-300">Call Admin</a>
-            <a href="/admin/login" className="bg-red-600 text-white px-4 py-2 rounded-full font-bold hover:bg-red-500">Admin</a>
+            <a href="tel:0243767677" className="rounded-xl bg-amber-400 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-amber-300">Call Admin</a>
+            <a href="/admin/login" className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-500">Admin Access</a>
           </div>
         </header>
 
-        <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-3">
-          <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
-          <input placeholder="Email (optional)" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
-          <input placeholder="Phone (+233...)" value={phone} onChange={(e) => setPhone(e.target.value)} className={inputClass} />
-        </div>
+        <section className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className={theme === "dark" ? "lg:col-span-2 rounded-3xl border border-cyan-200/20 bg-slate-900/70 p-7 backdrop-blur-lg" : "lg:col-span-2 rounded-3xl border border-slate-200 bg-white/95 p-7 backdrop-blur-lg"}
+          >
+            <h2 className={theme === "dark" ? "text-2xl font-semibold text-white md:text-3xl" : "text-2xl font-semibold text-slate-900 md:text-3xl"}>Premium internet plans with instant activation</h2>
+            <p className={theme === "dark" ? "mt-3 text-slate-300" : "mt-3 text-slate-700"}>
+              Choose a package, complete secure payment, and receive your credentials instantly by SMS with downloadable ticket support.
+            </p>
+            <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-3">
+              <div className={theme === "dark" ? "rounded-2xl border border-cyan-200/20 bg-slate-950/50 p-4" : "rounded-2xl border border-slate-200 bg-slate-50 p-4"}>
+                <div className={theme === "dark" ? "text-xs uppercase tracking-widest text-cyan-400" : "text-xs uppercase tracking-widest text-blue-700"}>Service SLA</div>
+                <div className={theme === "dark" ? "mt-1 text-lg font-semibold text-white" : "mt-1 text-lg font-semibold text-slate-900"}>99.9% Availability</div>
+              </div>
+              <div className={theme === "dark" ? "rounded-2xl border border-cyan-200/20 bg-slate-950/50 p-4" : "rounded-2xl border border-slate-200 bg-slate-50 p-4"}>
+                <div className={theme === "dark" ? "text-xs uppercase tracking-widest text-cyan-400" : "text-xs uppercase tracking-widest text-blue-700"}>Activation</div>
+                <div className={theme === "dark" ? "mt-1 text-lg font-semibold text-white" : "mt-1 text-lg font-semibold text-slate-900"}>Under 60 Seconds</div>
+              </div>
+              <div className={theme === "dark" ? "rounded-2xl border border-cyan-200/20 bg-slate-950/50 p-4" : "rounded-2xl border border-slate-200 bg-slate-50 p-4"}>
+                <div className={theme === "dark" ? "text-xs uppercase tracking-widest text-cyan-400" : "text-xs uppercase tracking-widest text-blue-700"}>Support</div>
+                <div className={theme === "dark" ? "mt-1 text-lg font-semibold text-white" : "mt-1 text-lg font-semibold text-slate-900"}>Direct WhatsApp Team</div>
+              </div>
+            </div>
+          </motion.div>
 
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {loadingPackages ? (
-            <div>Loading packages...</div>
-          ) : (
-            packages.map((p) => {
-              const isAvailable = availability[p.id];
-              return (
-                <div key={p.id} className={cardClass(isAvailable)}>
-                  <h3 className={theme === "dark" ? "text-xl font-bold text-sky-400 mb-2" : "text-xl font-bold text-blue-600 mb-2"}>{p.name}</h3>
-                  <p className={theme === "dark" ? "text-sm text-sky-200 mb-3" : "text-sm text-gray-700 mb-3"}>{p.description}</p>
-                  <div className="flex items-center justify-between">
-                    <div className={theme === "dark" ? "text-2xl font-extrabold text-sky-100" : "text-2xl font-extrabold text-gray-800"}>{formatGhs(p.price)}</div>
-       <button
-  onClick={() => payPackage(p)}
-  className={buttonClass(true)}
->
-  {processing ? "Processing..." : "Buy Now"}
-</button>
-
-
-                  </div>
-                </div>
-              );
-            })
-          )}
+          <motion.aside
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.1 }}
+            className={theme === "dark" ? "rounded-3xl border border-cyan-200/20 bg-slate-900/70 p-6 backdrop-blur-lg" : "rounded-3xl border border-slate-200 bg-white/95 p-6 backdrop-blur-lg"}
+          >
+            <h3 className={theme === "dark" ? "text-lg font-semibold text-white" : "text-lg font-semibold text-slate-900"}>Customer Profile</h3>
+            <p className={theme === "dark" ? "mt-1 text-sm text-slate-300" : "mt-1 text-sm text-slate-700"}>Required before checkout</p>
+            <div className="mt-4 grid gap-3">
+              <input placeholder="Full name" value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
+              <input placeholder="Email (optional)" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
+              <input placeholder="Phone (+233...)" value={phone} onChange={(e) => setPhone(e.target.value)} className={inputClass} />
+            </div>
+          </motion.aside>
         </section>
 
-        <section className="mt-6 relative h-[300px] md:h-[250px]">
-          <h2 className="text-2xl font-bold text-blue-700 text-center mb-4">Installation Fees</h2>
-          <AutoCarousel items={installationItems} theme={theme} whatsappPrefix={(item) => `Hello Admin, I want the ${item.title}.`} />
+        <section>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className={theme === "dark" ? "text-2xl font-semibold text-white" : "text-2xl font-semibold text-slate-900"}>Available WiFi Packages</h2>
+            <div className={theme === "dark" ? "text-sm text-slate-300" : "text-sm text-slate-700"}>Secure checkout via Paystack</div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+            {loadingPackages ? (
+              <div className={theme === "dark" ? "rounded-2xl border border-slate-700 bg-slate-900/50 p-6 text-slate-300" : "rounded-2xl border border-slate-200 bg-white p-6 text-slate-700"}>Loading packages...</div>
+            ) : (
+              packages.map((p, i) => {
+                const isAvailable = availability[p.id];
+                return (
+                  <motion.article
+                    key={p.id}
+                    initial={{ opacity: 0, y: 16 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.35, delay: i * 0.05 }}
+                    className={packageCardClass(isAvailable)}
+                  >
+                    <div className="mb-4 flex items-start justify-between gap-2">
+                      <h3 className={theme === "dark" ? "text-lg font-semibold text-white" : "text-lg font-semibold text-slate-900"}>{p.name}</h3>
+                      <span
+                        className={
+                          isAvailable
+                            ? theme === "dark"
+                              ? "rounded-full bg-emerald-500/20 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-300"
+                              : "rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-800"
+                            : theme === "dark"
+                            ? "rounded-full bg-rose-500/20 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-rose-300"
+                            : "rounded-full bg-rose-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-rose-800"
+                        }
+                      >
+                        {isAvailable ? "Available" : "Sold Out"}
+                      </span>
+                    </div>
+
+                    <p className={theme === "dark" ? "min-h-12 text-sm text-slate-300" : "min-h-12 text-sm text-slate-700"}>{p.description}</p>
+                    <div className={theme === "dark" ? "mt-5 text-3xl font-semibold text-cyan-300" : "mt-5 text-3xl font-semibold text-blue-700"}>{formatGhs(p.price)}</div>
+                    <div className={theme === "dark" ? "mb-5 mt-1 text-xs text-slate-400" : "mb-5 mt-1 text-xs text-slate-500"}>Transaction fee included automatically at checkout.</div>
+
+                    <button
+                      onClick={() => payPackage(p)}
+                      className={buttonClass(isAvailable)}
+                      disabled={processing || !isAvailable}
+                    >
+                      {processing ? "Processing..." : "Buy Now"}
+                    </button>
+                  </motion.article>
+                );
+              })
+            )}
+          </div>
         </section>
 
-        <section className="mt-6 relative h-[300px] md:h-[250px]">
-          <h2 className="text-2xl font-bold text-blue-700 text-center mb-4">Dedicated Internet Packages</h2>
-          <AutoCarousel items={dedicatedItems} theme={theme} whatsappPrefix={(item) => `Hello Admin, I want to order the ${item.speed} Dedicated Internet Package.`} />
+        <section className="grid grid-cols-1 gap-6 pb-2 lg:grid-cols-2">
+          <div className={theme === "dark" ? "rounded-3xl border border-cyan-200/20 bg-slate-900/70 p-6 backdrop-blur-lg" : "rounded-3xl border border-slate-200 bg-white/95 p-6 backdrop-blur-lg"}>
+            <h2 className={theme === "dark" ? "mb-4 text-xl font-semibold text-white" : "mb-4 text-xl font-semibold text-slate-900"}>Installation Services</h2>
+            <div className="h-[280px]">
+              <AutoCarousel items={installationItems} theme={theme} whatsappPrefix={(item) => `Hello Admin, I want the ${item.title}.`} />
+            </div>
+          </div>
+
+          <div className={theme === "dark" ? "rounded-3xl border border-cyan-200/20 bg-slate-900/70 p-6 backdrop-blur-lg" : "rounded-3xl border border-slate-200 bg-white/95 p-6 backdrop-blur-lg"}>
+            <h2 className={theme === "dark" ? "mb-4 text-xl font-semibold text-white" : "mb-4 text-xl font-semibold text-slate-900"}>Dedicated Internet</h2>
+            <div className="h-[280px]">
+              <AutoCarousel items={dedicatedItems} theme={theme} whatsappPrefix={(item) => `Hello Admin, I want to order the ${item.speed} Dedicated Internet Package.`} />
+            </div>
+          </div>
         </section>
-      </div>
+      </main>
     </div>
   );
 }
