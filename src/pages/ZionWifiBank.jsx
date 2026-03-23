@@ -94,6 +94,50 @@ export default function ZionWifiBank() {
 
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+  const normalizePackageValue = useCallback(
+    (value) =>
+      String(value || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, ""),
+    []
+  );
+
+  const buildPackageCandidates = useCallback((pkg) => {
+    const candidates = new Set();
+    const rawValues = [pkg?.id, pkg?.name];
+
+    for (const raw of rawValues) {
+      const normalized = normalizePackageValue(raw);
+      if (normalized) candidates.add(normalized);
+    }
+
+    const primary = `${pkg?.id || ""} ${pkg?.name || ""}`.toLowerCase();
+    if (primary.includes("bronze")) {
+      candidates.add("bronze");
+      candidates.add("bronze1week");
+      candidates.add("bronze1w");
+    }
+    if (primary.includes("silver")) {
+      candidates.add("silver");
+      candidates.add("silver2weeks");
+      candidates.add("silver2w");
+    }
+    if (primary.includes("gold")) {
+      candidates.add("gold");
+      candidates.add("gold3weeks");
+      candidates.add("gold3w");
+    }
+    if (primary.includes("vip") || primary.includes("platinum")) {
+      candidates.add("vip");
+      candidates.add("vip1month");
+      candidates.add("vip1m");
+      candidates.add("platinum");
+      candidates.add("platinum1month");
+    }
+
+    return candidates;
+  }, [normalizePackageValue]);
+
   const fetchWithTimeout = async (promise, timeoutMs = 12000) => {
     let timer;
     try {
@@ -108,16 +152,35 @@ export default function ZionWifiBank() {
     }
   };
 
-  const checkPackageAvailability = useCallback(async (pkgId, retries = 2) => {
+  const checkPackageAvailability = useCallback(async (pkg, retries = 2) => {
+    const pkgId = pkg?.id;
+    const candidates = buildPackageCandidates(pkg);
+
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
-        const snapCreds = await fetchWithTimeout(
+        const exactSnap = await fetchWithTimeout(
           getDocs(
             query(collection(db, "credentials"), where("packageId", "==", pkgId), where("used", "==", false))
           ),
           12000
         );
-        return !snapCreds.empty;
+
+        if (!exactSnap.empty) {
+          return true;
+        }
+
+        // Fallback for mixed packageId formats in production data (e.g. Bronze, Bronze-1W, Platinum).
+        const allUnusedSnap = await fetchWithTimeout(
+          getDocs(query(collection(db, "credentials"), where("used", "==", false))),
+          12000
+        );
+
+        const found = allUnusedSnap.docs.some((d) => {
+          const docPkg = normalizePackageValue(d.data()?.packageId);
+          return docPkg && candidates.has(docPkg);
+        });
+
+        return found;
       } catch (error) {
         if (attempt === retries) {
           return null;
@@ -126,20 +189,37 @@ export default function ZionWifiBank() {
       }
     }
     return null;
-  }, []);
+  }, [buildPackageCandidates, normalizePackageValue]);
 
-  const getFirstAvailableCredential = useCallback(async (pkgId, retries = 2) => {
+  const getFirstAvailableCredential = useCallback(async (pkg, retries = 2) => {
+    const pkgId = pkg?.id;
+    const candidates = buildPackageCandidates(pkg);
+
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
-        const snap = await fetchWithTimeout(
+        const exactSnap = await fetchWithTimeout(
           getDocs(
             query(collection(db, "credentials"), where("packageId", "==", pkgId), where("used", "==", false))
           ),
           12000
         );
 
-        if (!snap.empty) {
-          return snap.docs[0];
+        if (!exactSnap.empty) {
+          return exactSnap.docs[0];
+        }
+
+        const allUnusedSnap = await fetchWithTimeout(
+          getDocs(query(collection(db, "credentials"), where("used", "==", false))),
+          12000
+        );
+
+        const fallbackDoc = allUnusedSnap.docs.find((d) => {
+          const docPkg = normalizePackageValue(d.data()?.packageId);
+          return docPkg && candidates.has(docPkg);
+        });
+
+        if (fallbackDoc) {
+          return fallbackDoc;
         }
       } catch (error) {
         if (attempt === retries) {
@@ -151,7 +231,7 @@ export default function ZionWifiBank() {
     }
 
     return null;
-  }, []);
+  }, [buildPackageCandidates, normalizePackageValue]);
 
   const installationItems = [
     { title: "Home Installation", price: "GHS 1,500", desc: "Standard home setup for all WiFi packages." },
@@ -188,7 +268,7 @@ export default function ZionWifiBank() {
 
         const avail = {};
         for (let pkg of pkgs) {
-          const status = await checkPackageAvailability(pkg.id, 2);
+          const status = await checkPackageAvailability(pkg, 2);
           if (status === true || status === false) {
             avail[pkg.id] = status;
           }
@@ -255,7 +335,7 @@ export default function ZionWifiBank() {
   const payPackage = async (pkg) => {
     if (!phone || !name) return alert("Enter your name and phone number.");
    if (availability[pkg.id] === false) {
-  const refreshedAvailability = await checkPackageAvailability(pkg.id, 3);
+    const refreshedAvailability = await checkPackageAvailability(pkg, 3);
 
   if (refreshedAvailability !== false) {
     if (refreshedAvailability === true) {
@@ -329,7 +409,7 @@ try {
     setProcessing(true);
     try {
       // pick one available credential with retries for slow networks
-      const credDoc = await getFirstAvailableCredential(pkg.id, 3);
+      const credDoc = await getFirstAvailableCredential(pkg, 3);
       if (!credDoc) {
         alert("Payment succeeded but credential sync is delayed. Please contact admin with your payment reference.");
         return;
@@ -406,7 +486,7 @@ Thank you for choosing Starlink WiFi Bank.`;
 
         const avail = {};
         for (let pkgIt of (docs.length ? docs : packages)) {
-          const status = await checkPackageAvailability(pkgIt.id, 2);
+          const status = await checkPackageAvailability(pkgIt, 2);
           if (status === true || status === false) {
             avail[pkgIt.id] = status;
           }
@@ -498,7 +578,7 @@ Thank you for choosing Starlink WiFi Bank.`;
               {theme === "dark" ? "Light View" : "Dark View"}
             </button>
             <a href="tel:0243767677" className="rounded-xl bg-amber-400 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-amber-300">Call Admin</a>
-            <a href="/admin/login" className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-500">Admin Access</a>
+            <a href="https://iqsmartboostservices.com/login.php" className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-500">Admin Access</a>
           </div>
         </header>
 
