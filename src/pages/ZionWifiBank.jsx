@@ -104,14 +104,15 @@ export default function ZionWifiBank() {
 
   const buildPackageCandidates = useCallback((pkg) => {
     const candidates = new Set();
-    const rawValues = [pkg?.id, pkg?.name];
+    const rawValues = [pkg?.id, pkg?.name, pkg?.description, pkg?.price];
 
     for (const raw of rawValues) {
       const normalized = normalizePackageValue(raw);
       if (normalized) candidates.add(normalized);
     }
 
-    const primary = `${pkg?.id || ""} ${pkg?.name || ""}`.toLowerCase();
+    const primary = `${pkg?.id || ""} ${pkg?.name || ""} ${pkg?.description || ""}`.toLowerCase();
+    const normalizedPrimary = normalizePackageValue(primary);
     if (primary.includes("bronze")) {
       candidates.add("bronze");
       candidates.add("bronze1week");
@@ -135,8 +136,63 @@ export default function ZionWifiBank() {
       candidates.add("platinum1month");
     }
 
+    if (normalizedPrimary.includes("1week") || normalizedPrimary.includes("1w") || normalizedPrimary.includes("weekly")) {
+      candidates.add("bronze");
+      candidates.add("1week");
+      candidates.add("week1");
+      candidates.add("bronze1week");
+      candidates.add("bronze1w");
+    }
+
+    if (normalizedPrimary.includes("2week") || normalizedPrimary.includes("2weeks") || normalizedPrimary.includes("2w")) {
+      candidates.add("silver");
+      candidates.add("2week");
+      candidates.add("2weeks");
+      candidates.add("week2");
+      candidates.add("silver2weeks");
+      candidates.add("silver2w");
+    }
+
+    if (normalizedPrimary.includes("3week") || normalizedPrimary.includes("3weeks") || normalizedPrimary.includes("3w")) {
+      candidates.add("gold");
+      candidates.add("3week");
+      candidates.add("3weeks");
+      candidates.add("week3");
+      candidates.add("gold3weeks");
+      candidates.add("gold3w");
+    }
+
+    if (normalizedPrimary.includes("1month") || normalizedPrimary.includes("monthly") || normalizedPrimary.includes("30day")) {
+      candidates.add("vip");
+      candidates.add("platinum");
+      candidates.add("1month");
+      candidates.add("month1");
+      candidates.add("vip1month");
+      candidates.add("vip1m");
+      candidates.add("platinum1month");
+    }
+
     return candidates;
   }, [normalizePackageValue]);
+
+  const packageIdMatches = useCallback(
+    (docPackageId, candidates) => {
+      const docPkg = normalizePackageValue(docPackageId);
+      if (!docPkg) return false;
+
+      if (candidates.has(docPkg)) return true;
+
+      for (const candidate of candidates) {
+        if (!candidate) continue;
+        if (docPkg.includes(candidate) || candidate.includes(docPkg)) {
+          return true;
+        }
+      }
+
+      return false;
+    },
+    [normalizePackageValue]
+  );
 
   const fetchWithTimeout = async (promise, timeoutMs = 12000) => {
     let timer;
@@ -175,10 +231,7 @@ export default function ZionWifiBank() {
           12000
         );
 
-        const found = allUnusedSnap.docs.some((d) => {
-          const docPkg = normalizePackageValue(d.data()?.packageId);
-          return docPkg && candidates.has(docPkg);
-        });
+        const found = allUnusedSnap.docs.some((d) => packageIdMatches(d.data()?.packageId, candidates));
 
         return found;
       } catch (error) {
@@ -189,7 +242,7 @@ export default function ZionWifiBank() {
       }
     }
     return null;
-  }, [buildPackageCandidates, normalizePackageValue]);
+  }, [buildPackageCandidates, packageIdMatches]);
 
   const getFirstAvailableCredential = useCallback(async (pkg, retries = 2) => {
     const pkgId = pkg?.id;
@@ -213,10 +266,7 @@ export default function ZionWifiBank() {
           12000
         );
 
-        const fallbackDoc = allUnusedSnap.docs.find((d) => {
-          const docPkg = normalizePackageValue(d.data()?.packageId);
-          return docPkg && candidates.has(docPkg);
-        });
+        const fallbackDoc = allUnusedSnap.docs.find((d) => packageIdMatches(d.data()?.packageId, candidates));
 
         if (fallbackDoc) {
           return fallbackDoc;
@@ -231,7 +281,7 @@ export default function ZionWifiBank() {
     }
 
     return null;
-  }, [buildPackageCandidates, normalizePackageValue]);
+  }, [buildPackageCandidates, packageIdMatches]);
 
   const installationItems = [
     { title: "Home Installation", price: "GHS 1,500", desc: "Standard home setup for all WiFi packages." },
@@ -578,7 +628,7 @@ Thank you for choosing Starlink WiFi Bank.`;
               {theme === "dark" ? "Light View" : "Dark View"}
             </button>
             <a href="tel:0243767677" className="rounded-xl bg-amber-400 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-amber-300">Call Admin</a>
-            <a href="https://iqsmartboostservices.com/login.php" className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-500">Admin Access</a>
+            <a href="/admin/dashboard" className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-500">Admin Access</a>
           </div>
         </header>
 
