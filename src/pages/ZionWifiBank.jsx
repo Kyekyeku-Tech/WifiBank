@@ -89,6 +89,7 @@ export default function ZionWifiBank() {
   const [theme, setTheme] = useState("dark");
 
   const PAYSTACK_KEY = process.env.REACT_APP_PAYSTACK_KEY;
+  const API_BASE_URL = (process.env.REACT_APP_API_BASE_URL || "").replace(/\/$/, "");
 
   const toggleTheme = () => setTheme(theme === "dark" ? "light" : "dark");
 
@@ -373,6 +374,11 @@ export default function ZionWifiBank() {
 
   const formatGhs = (x) => `GHS ${Number(x).toFixed(2)}`;
 
+  const buildApiUrl = (path) => {
+    if (!API_BASE_URL) return path;
+    return `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
+  };
+
   const generateTicket = ({ reference, pkg, username, password }) => {
     const docPDF = new jsPDF();
     docPDF.setFontSize(18);
@@ -387,7 +393,11 @@ export default function ZionWifiBank() {
     docPDF.text(`Reference: ${reference}`, 20, 90);
     docPDF.text(`Date: ${new Date().toLocaleString()}`, 20, 100);
 
-    docPDF.save(`Ticket-${reference}.pdf`);
+    try {
+      docPDF.save(`Ticket-${reference}.pdf`);
+    } catch (err) {
+      console.error("PDF download failed:", err);
+    }
 
     const canvas = document.createElement("canvas");
     canvas.width = 700;
@@ -411,10 +421,16 @@ export default function ZionWifiBank() {
 
     const jpgURL = canvas.toDataURL("image/jpeg");
 
-    const a = document.createElement("a");
-    a.href = jpgURL;
-    a.download = `Ticket-${reference}.jpg`;
-    a.click();
+    try {
+      const a = document.createElement("a");
+      a.href = jpgURL;
+      a.download = `Ticket-${reference}.jpg`;
+      a.click();
+    } catch (err) {
+      console.error("JPG download failed:", err);
+    }
+
+    return jpgURL;
   };
 
   const payPackage = async (pkg) => {
@@ -526,6 +542,8 @@ try {
       // Some admin dashboards may read from MtnTransactions — write there as well to be safe
       await addDoc(collection(db, "MtnTransactions"), txData);
 
+      let smsSent = false;
+
       // Send SMS (best-effort)
       try {
         const smsMessage = `Hello ${name}, your WiFi access is ready!
@@ -535,7 +553,7 @@ Password: ${credData.password}
 Reference: ${reference}
 Thank you for choosing Starlink WiFi Bank.`;
 
-        const response = await fetch("/api/send-sms", {
+        const response = await fetch(buildApiUrl("/api/send-sms"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -547,14 +565,28 @@ Thank you for choosing Starlink WiFi Bank.`;
         const data = await response.json();
         if (!response.ok || !data.success) {
           console.error("SMS failed:", data);
+        } else {
+          smsSent = true;
         }
       } catch (smsErr) {
         console.error("SMS error:", smsErr);
       }
 
-      alert(`Payment succeeded! Downloading your ticket.`);
+      if (!smsSent) {
+        alert(
+          "Payment succeeded, but SMS delivery failed. Your ticket will still download now. If needed, contact admin with your payment reference."
+        );
+      } else {
+        alert("Payment succeeded! Downloading your ticket and sending SMS.");
+      }
 
-      generateTicket({ reference, pkg, username: credData.username, password: credData.password });
+      const ticketImageUrl = generateTicket({ reference, pkg, username: credData.username, password: credData.password });
+
+      // Mobile browsers sometimes block automatic file downloads; open a viewable receipt fallback.
+      const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+      if (isMobile && ticketImageUrl) {
+        window.open(ticketImageUrl, "_blank");
+      }
 
       // update local availability to reflect the used credential
       setAvailability((prev) => ({ ...prev, [pkg.id]: false }));
