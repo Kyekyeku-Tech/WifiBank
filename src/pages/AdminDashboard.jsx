@@ -63,6 +63,74 @@ export default function AdminDashboard() {
     { id: "vip-1m", name: "Platinum — 1 Month" },
   ];
 
+  const normalizePackageId = (value) => {
+    const raw = String(value || "").toLowerCase();
+    const normalized = raw.replace(/[^a-z0-9]/g, "");
+
+    if (
+      normalized === "bronze1w" ||
+      normalized === "bronze1week" ||
+      normalized.includes("bronze") ||
+      normalized.includes("1week") ||
+      normalized === "1w" ||
+      normalized.includes("ghs20") ||
+      normalized === "20"
+    ) {
+      return "bronze-1w";
+    }
+
+    if (
+      normalized === "silver2w" ||
+      normalized === "silver2weeks" ||
+      normalized.includes("silver") ||
+      normalized.includes("2week") ||
+      normalized === "2w" ||
+      normalized.includes("ghs40") ||
+      normalized === "40"
+    ) {
+      return "silver-2w";
+    }
+
+    if (
+      normalized === "gold3w" ||
+      normalized === "gold3weeks" ||
+      normalized.includes("gold") ||
+      normalized.includes("3week") ||
+      normalized === "3w" ||
+      normalized.includes("ghs60") ||
+      normalized === "60"
+    ) {
+      return "gold-3w";
+    }
+
+    if (
+      normalized === "vip1m" ||
+      normalized === "vip1month" ||
+      normalized === "platinum1month" ||
+      normalized.includes("vip") ||
+      normalized.includes("platinum") ||
+      normalized.includes("1month") ||
+      normalized.includes("monthly") ||
+      normalized.includes("ghs90") ||
+      normalized === "90"
+    ) {
+      return "vip-1m";
+    }
+
+    return String(value || "");
+  };
+
+  const normalizeUsedValue = (value) => {
+    if (typeof value === "boolean") return value;
+    if (typeof value === "number") return value !== 0;
+    if (value === null || typeof value === "undefined" || value === "") return false;
+
+    const text = String(value).trim().toLowerCase();
+    if (["false", "0", "unused", "no", "notused"].includes(text)) return false;
+    if (["true", "1", "used", "yes"].includes(text)) return true;
+    return false;
+  };
+
   // Redirect if not authenticated
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -128,7 +196,7 @@ export default function AdminDashboard() {
       await addDoc(collection(db, "credentials"), {
         username,
         password,
-        packageId,
+        packageId: normalizePackageId(packageId),
         description,
         used: false,
         assignedTo: null,
@@ -203,6 +271,56 @@ export default function AdminDashboard() {
     navigate("/admin/login");
   };
 
+  const normalizeExistingCredentials = async () => {
+    const proceed = window.confirm(
+      "Normalize existing credentials now? This will standardize packageId and used values."
+    );
+    if (!proceed) return;
+
+    setProcessing(true);
+    try {
+      const snap = await getDocs(collection(db, "credentials"));
+      const updates = [];
+
+      for (const item of snap.docs) {
+        const data = item.data() || {};
+        const sourcePackageValue =
+          data.packageId ||
+          data.package ||
+          data.packageName ||
+          data.plan ||
+          data.type ||
+          data.description ||
+          data.name ||
+          data.price;
+
+        const fixedPackageId = normalizePackageId(sourcePackageValue);
+        const fixedUsed = normalizeUsedValue(data.used);
+
+        const patch = {};
+        if (fixedPackageId && data.packageId !== fixedPackageId) {
+          patch.packageId = fixedPackageId;
+        }
+        if (data.used !== fixedUsed) {
+          patch.used = fixedUsed;
+        }
+
+        if (Object.keys(patch).length) {
+          updates.push(updateDoc(doc(db, "credentials", item.id), patch));
+        }
+      }
+
+      await Promise.all(updates);
+      await fetchCredentials();
+      alert(`Normalization complete. Updated ${updates.length} credential(s).`);
+    } catch (err) {
+      console.error("normalizeExistingCredentials error:", err);
+      alert("Failed to normalize credentials.");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   // --------------------------
   // CSV file upload from device (kept)
   // --------------------------
@@ -238,7 +356,7 @@ export default function AdminDashboard() {
         }
         const usernameVal = parts[0];
         const passwordVal = parts[1];
-        const packageVal = parts[2] || packageId;
+        const packageVal = normalizePackageId(parts[2] || packageId);
         // join remaining parts as description (so description can contain commas)
         const descriptionVal = parts.slice(3).join(",") || parts[3] || "";
 
@@ -250,7 +368,7 @@ export default function AdminDashboard() {
         rows.push({
           username: usernameVal,
           password: passwordVal,
-          packageId: packageVal,
+          packageId: normalizePackageId(packageVal),
           description: descriptionVal,
         });
       }
@@ -266,7 +384,7 @@ export default function AdminDashboard() {
           addDoc(collection(db, "credentials"), {
             username: r.username,
             password: r.password,
-            packageId: r.packageId,
+            packageId: normalizePackageId(r.packageId),
             description: r.description,
             used: false,
             assignedTo: null,
@@ -313,14 +431,14 @@ export default function AdminDashboard() {
   // Derived / filtered data & stats
   // --------------------------
   const totalCredentials = credentials.length;
-  const availableCredentials = credentials.filter((c) => !c.used).length;
-  const usedCredentials = credentials.filter((c) => !!c.used).length;
+  const availableCredentials = credentials.filter((c) => !normalizeUsedValue(c.used)).length;
+  const usedCredentials = credentials.filter((c) => normalizeUsedValue(c.used)).length;
 
   // Credentials filtering
   const filteredCredentials = credentials
     .filter((c) => (credPackageFilter ? c.packageId === credPackageFilter : true))
     .filter((c) =>
-      credUsedFilter === "all" ? true : credUsedFilter === "used" ? !!c.used : !c.used
+      credUsedFilter === "all" ? true : credUsedFilter === "used" ? normalizeUsedValue(c.used) : !normalizeUsedValue(c.used)
     )
     .filter((c) => (credSearch ? c.username.toLowerCase().includes(credSearch.toLowerCase()) : true));
 
@@ -556,6 +674,14 @@ export default function AdminDashboard() {
             className="px-6 py-2 rounded-full font-semibold bg-gray-500/30"
           >
             Clear
+          </button>
+
+          <button
+            onClick={normalizeExistingCredentials}
+            disabled={processing}
+            className="px-6 py-2 rounded-full font-semibold bg-amber-600 hover:bg-amber-500 text-white disabled:opacity-60"
+          >
+            Normalize Credentials
           </button>
         </div>
 
