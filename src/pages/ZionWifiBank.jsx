@@ -193,7 +193,7 @@ export default function ZionWifiBank() {
 
   const payPackage = async (pkg) => {
     if (!phone || !name) return alert("Enter your name and phone number.");
-   if (!availability[pkg.id]) {
+   if (availability[pkg.id] === false) {
   const msg = `Hello Admin, I want to buy the ${pkg.name} package but it shows as unavailable. Please assist me.`;
 
   const goWhatsApp = window.confirm(
@@ -491,7 +491,8 @@ Thank you for choosing Starlink WiFi Bank.`;
               <div className={theme === "dark" ? "rounded-2xl border border-slate-700 bg-slate-900/50 p-6 text-slate-300" : "rounded-2xl border border-slate-200 bg-white p-6 text-slate-700"}>Loading packages...</div>
             ) : (
               packages.map((p, i) => {
-                const isAvailable = availability[p.id];
+                const hasAvailability = Object.prototype.hasOwnProperty.call(availability, p.id);
+                const isAvailable = hasAvailability ? availability[p.id] : true;
                 return (
                   <motion.article
                     key={p.id}
@@ -504,16 +505,20 @@ Thank you for choosing Starlink WiFi Bank.`;
                       <h3 className={theme === "dark" ? "text-lg font-semibold text-white" : "text-lg font-semibold text-slate-900"}>{p.name}</h3>
                       <span
                         className={
-                          isAvailable
-                            ? theme === "dark"
-                              ? "rounded-full bg-emerald-500/20 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-300"
-                              : "rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-800"
+                          hasAvailability
+                            ? isAvailable
+                              ? theme === "dark"
+                                ? "rounded-full bg-emerald-500/20 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-300"
+                                : "rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-800"
+                              : theme === "dark"
+                              ? "rounded-full bg-rose-500/20 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-rose-300"
+                              : "rounded-full bg-rose-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-rose-800"
                             : theme === "dark"
-                            ? "rounded-full bg-rose-500/20 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-rose-300"
-                            : "rounded-full bg-rose-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-rose-800"
+                            ? "rounded-full bg-amber-500/20 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-300"
+                            : "rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-800"
                         }
                       >
-                        {isAvailable ? "Available" : "Sold Out"}
+                        {hasAvailability ? (isAvailable ? "Available" : "Sold Out") : "Checking"}
                       </span>
                     </div>
 
