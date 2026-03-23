@@ -619,12 +619,19 @@ try {
       }
       const credData = credDoc.data();
 
+      const syncErrors = [];
+
       // mark credential as used with Firestore server timestamp
-      await updateDoc(doc(db, "credentials", credDoc.id), {
-        used: true,
-        assignedTo: phone,
-        assignedAt: serverTimestamp(),
-      });
+      try {
+        await updateDoc(doc(db, "credentials", credDoc.id), {
+          used: true,
+          assignedTo: phone,
+          assignedAt: serverTimestamp(),
+        });
+      } catch (err) {
+        console.error("Credential update failed:", err);
+        syncErrors.push("credential-update");
+      }
 
       // Save transaction into BOTH collections to match various admin expectations
       const txData = {
@@ -640,9 +647,20 @@ try {
       };
 
       // Primary transactions collection
-      await addDoc(collection(db, "transactions"), txData);
+      try {
+        await addDoc(collection(db, "transactions"), txData);
+      } catch (err) {
+        console.error("transactions write failed:", err);
+        syncErrors.push("transactions");
+      }
+
       // Some admin dashboards may read from MtnTransactions — write there as well to be safe
-      await addDoc(collection(db, "MtnTransactions"), txData);
+      try {
+        await addDoc(collection(db, "MtnTransactions"), txData);
+      } catch (err) {
+        console.error("MtnTransactions write failed:", err);
+        syncErrors.push("mtn-transactions");
+      }
 
       const smsMessage = `Hello ${name}, your WiFi access is ready!
 Package: ${pkg.name}
@@ -652,9 +670,23 @@ Reference: ${reference}
 Thank you for choosing Starlink WiFi Bank.`;
       const smsSent = await sendSms({ recipient: phone, message: smsMessage });
 
+      const credentialSummary = `Username: ${credData.username}\nPassword: ${credData.password}\nReference: ${reference}`;
+
+      if (!smsSent) {
+        try {
+          await navigator.clipboard.writeText(credentialSummary);
+        } catch (e) {
+          console.error("Clipboard copy failed:", e);
+        }
+      }
+
       if (!smsSent) {
         alert(
-          "Payment succeeded, but SMS delivery failed. Your ticket will still download now. If needed, contact admin with your payment reference."
+          `Payment succeeded, but SMS delivery failed.\n\n${credentialSummary}\n\nThese details have been copied (if clipboard is allowed).`
+        );
+      } else if (syncErrors.length) {
+        alert(
+          `Payment succeeded and SMS sent, but admin sync had delays (${syncErrors.join(", ")}). Your access details are:\n\n${credentialSummary}`
         );
       } else {
         alert("Payment succeeded! Downloading your ticket and sending SMS.");
@@ -668,11 +700,13 @@ Thank you for choosing Starlink WiFi Bank.`;
         window.open(ticketImageUrl, "_blank");
       }
 
-      // update local availability to reflect the used credential
-      setAvailability((prev) => ({ ...prev, [pkg.id]: false }));
+      // update local availability only if credential usage was synced
+      if (!syncErrors.includes("credential-update")) {
+        setAvailability((prev) => ({ ...prev, [pkg.id]: false }));
+      }
     } catch (err) {
       console.error(err);
-      alert("Payment succeeded but credential assignment failed.");
+      alert("Payment succeeded but credential assignment failed. Please contact admin with your payment reference immediately.");
     } finally {
       setProcessing(false);
       // refresh packages/availability in background
