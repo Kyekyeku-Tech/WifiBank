@@ -90,6 +90,8 @@ export default function ZionWifiBank() {
 
   const PAYSTACK_KEY = process.env.REACT_APP_PAYSTACK_KEY;
   const API_BASE_URL = (process.env.REACT_APP_API_BASE_URL || "").replace(/\/$/, "");
+  const MNOTIFY_KEY = process.env.REACT_APP_MNOTIFY_KEY || "";
+  const MNOTIFY_SENDER = process.env.REACT_APP_MNOTIFY_SENDER || "Chidiz Hub";
 
   const toggleTheme = () => setTheme(theme === "dark" ? "light" : "dark");
 
@@ -345,7 +347,7 @@ export default function ZionWifiBank() {
         const pkgs = docs.length
           ? docs
           : [
-              { id: "bronze-1w", name: "Bronze — 1 Week", price: 20, description: "1 Week Unlimited" },
+              { id: "bronze-1w", name: "Bronze — 1 Week", price: 1, description: "1 Week Unlimited" },
               { id: "silver-2w", name: "Silver — 2 Weeks", price: 40, description: "2 Weeks Unlimited" },
               { id: "gold-3w", name: "Gold — 3 Weeks", price: 60, description: "3 Weeks Unlimited" },
               { id: "vip-1m", name: "Platinum — 1 Month", price: 90, description: "1 Month, 2 devices Unlimited" },
@@ -374,9 +376,109 @@ export default function ZionWifiBank() {
 
   const formatGhs = (x) => `GHS ${Number(x).toFixed(2)}`;
 
-  const buildApiUrl = (path) => {
-    if (!API_BASE_URL) return path;
-    return `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
+  const buildSmsApiTargets = () => {
+    const targets = new Set();
+
+    if (API_BASE_URL) targets.add(API_BASE_URL);
+
+    if (typeof window !== "undefined" && window.location?.origin) {
+      targets.add(window.location.origin);
+    }
+
+    // Known hosted origins used by this project.
+    targets.add("https://wifi-bank.vercel.app");
+    targets.add("https://iqsmartboostservices.com");
+
+    return Array.from(targets);
+  };
+
+  const buildPhoneCandidates = (rawPhone) => {
+    const cleaned = String(rawPhone || "").trim().replace(/\s+/g, "");
+    const digits = cleaned.replace(/\D/g, "");
+    const candidates = new Set();
+
+    if (cleaned) candidates.add(cleaned);
+    if (digits) candidates.add(digits);
+
+    if (digits.startsWith("0") && digits.length === 10) {
+      candidates.add(`233${digits.slice(1)}`);
+      candidates.add(`+233${digits.slice(1)}`);
+    }
+
+    if (digits.startsWith("233") && digits.length >= 12) {
+      const local = `0${digits.slice(3)}`;
+      candidates.add(local);
+      candidates.add(`+${digits}`);
+      candidates.add(digits);
+    }
+
+    if (cleaned.startsWith("+233")) {
+      const localFromPlus = `0${cleaned.slice(4).replace(/\D/g, "")}`;
+      if (localFromPlus.length === 10) candidates.add(localFromPlus);
+    }
+
+    return Array.from(candidates).filter(Boolean);
+  };
+
+  const sendSms = async ({ recipient, message }) => {
+    const recipients = buildPhoneCandidates(recipient);
+    const apiTargets = buildSmsApiTargets();
+
+    for (const apiBase of apiTargets) {
+      const endpoint = `${apiBase.replace(/\/$/, "")}/api/send-sms`;
+      for (const phoneCandidate of recipients) {
+        try {
+          const response = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ recipient: phoneCandidate, message }),
+          });
+
+          const data = await response.json();
+          if (response.ok && data.success) {
+            return true;
+          }
+
+          console.error("Backend SMS failed:", endpoint, phoneCandidate, data);
+        } catch (error) {
+          console.error("Backend SMS error:", endpoint, phoneCandidate, error);
+        }
+      }
+    }
+
+    if (!MNOTIFY_KEY) {
+      return false;
+    }
+
+    for (const phoneCandidate of recipients) {
+      try {
+        const response = await fetch(
+          `https://api.mnotify.com/api/sms/quick?key=${encodeURIComponent(MNOTIFY_KEY)}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              recipient: [phoneCandidate],
+              sender: MNOTIFY_SENDER,
+              message,
+              is_schedule: false,
+              schedule_date: "",
+            }),
+          }
+        );
+
+        const data = await response.json();
+        if (response.ok && data.status === "success") {
+          return true;
+        }
+
+        console.error("Direct mNotify SMS failed:", phoneCandidate, data);
+      } catch (error) {
+        console.error("Direct mNotify SMS error:", phoneCandidate, error);
+      }
+    }
+
+    return false;
   };
 
   const generateTicket = ({ reference, pkg, username, password }) => {
@@ -542,35 +644,13 @@ try {
       // Some admin dashboards may read from MtnTransactions — write there as well to be safe
       await addDoc(collection(db, "MtnTransactions"), txData);
 
-      let smsSent = false;
-
-      // Send SMS (best-effort)
-      try {
-        const smsMessage = `Hello ${name}, your WiFi access is ready!
+      const smsMessage = `Hello ${name}, your WiFi access is ready!
 Package: ${pkg.name}
 Username: ${credData.username}
 Password: ${credData.password}
 Reference: ${reference}
 Thank you for choosing Starlink WiFi Bank.`;
-
-        const response = await fetch(buildApiUrl("/api/send-sms"), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            recipient: phone,
-            message: smsMessage,
-          }),
-        });
-
-        const data = await response.json();
-        if (!response.ok || !data.success) {
-          console.error("SMS failed:", data);
-        } else {
-          smsSent = true;
-        }
-      } catch (smsErr) {
-        console.error("SMS error:", smsErr);
-      }
+      const smsSent = await sendSms({ recipient: phone, message: smsMessage });
 
       if (!smsSent) {
         alert(
