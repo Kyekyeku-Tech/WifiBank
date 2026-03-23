@@ -1,5 +1,5 @@
 // Full working ZionWifiBank.jsx
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   collection,
   getDocs,
@@ -92,6 +92,67 @@ export default function ZionWifiBank() {
 
   const toggleTheme = () => setTheme(theme === "dark" ? "light" : "dark");
 
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  const fetchWithTimeout = async (promise, timeoutMs = 12000) => {
+    let timer;
+    try {
+      return await Promise.race([
+        promise,
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error("Network timeout")), timeoutMs);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  const checkPackageAvailability = useCallback(async (pkgId, retries = 2) => {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const snapCreds = await fetchWithTimeout(
+          getDocs(
+            query(collection(db, "credentials"), where("packageId", "==", pkgId), where("used", "==", false))
+          ),
+          12000
+        );
+        return !snapCreds.empty;
+      } catch (error) {
+        if (attempt === retries) {
+          return null;
+        }
+        await wait(700 * (attempt + 1));
+      }
+    }
+    return null;
+  }, []);
+
+  const getFirstAvailableCredential = useCallback(async (pkgId, retries = 2) => {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const snap = await fetchWithTimeout(
+          getDocs(
+            query(collection(db, "credentials"), where("packageId", "==", pkgId), where("used", "==", false))
+          ),
+          12000
+        );
+
+        if (!snap.empty) {
+          return snap.docs[0];
+        }
+      } catch (error) {
+        if (attempt === retries) {
+          throw error;
+        }
+      }
+
+      await wait(700 * (attempt + 1));
+    }
+
+    return null;
+  }, []);
+
   const installationItems = [
     { title: "Home Installation", price: "GHS 1,500", desc: "Standard home setup for all WiFi packages." },
     { title: "Business Installation", price: "GHS 1,500", desc: "Advanced installation for shops and offices." },
@@ -127,10 +188,10 @@ export default function ZionWifiBank() {
 
         const avail = {};
         for (let pkg of pkgs) {
-          const snapCreds = await getDocs(
-            query(collection(db, "credentials"), where("packageId", "==", pkg.id), where("used", "==", false))
-          );
-          avail[pkg.id] = !snapCreds.empty;
+          const status = await checkPackageAvailability(pkg.id, 2);
+          if (status === true || status === false) {
+            avail[pkg.id] = status;
+          }
         }
         setAvailability(avail);
       } catch (err) {
@@ -143,7 +204,7 @@ export default function ZionWifiBank() {
       }
     }
     loadPackages();
-  }, []);
+  }, [checkPackageAvailability]);
 
   const formatGhs = (x) => `GHS ${Number(x).toFixed(2)}`;
 
@@ -194,6 +255,13 @@ export default function ZionWifiBank() {
   const payPackage = async (pkg) => {
     if (!phone || !name) return alert("Enter your name and phone number.");
    if (availability[pkg.id] === false) {
+  const refreshedAvailability = await checkPackageAvailability(pkg.id, 3);
+
+  if (refreshedAvailability !== false) {
+    if (refreshedAvailability === true) {
+      setAvailability((prev) => ({ ...prev, [pkg.id]: true }));
+    }
+  } else {
   const msg = `Hello Admin, I want to buy the ${pkg.name} package but it shows as unavailable. Please assist me.`;
 
   const goWhatsApp = window.confirm(
@@ -207,6 +275,7 @@ export default function ZionWifiBank() {
     );
   }
   return;
+  }
 }
 
     if (!PAYSTACK_KEY) {
@@ -259,16 +328,12 @@ try {
   const handlePaymentSuccess = async (reference, pkg) => {
     setProcessing(true);
     try {
-      // pick one available credential
-      const snap = await getDocs(
-        query(collection(db, "credentials"), where("packageId", "==", pkg.id), where("used", "==", false))
-      );
-      if (snap.empty) {
-        alert("Payment succeeded but no credentials available.");
+      // pick one available credential with retries for slow networks
+      const credDoc = await getFirstAvailableCredential(pkg.id, 3);
+      if (!credDoc) {
+        alert("Payment succeeded but credential sync is delayed. Please contact admin with your payment reference.");
         return;
       }
-
-      const credDoc = snap.docs[0];
       const credData = credDoc.data();
 
       // mark credential as used with Firestore server timestamp
@@ -341,10 +406,10 @@ Thank you for choosing Starlink WiFi Bank.`;
 
         const avail = {};
         for (let pkgIt of (docs.length ? docs : packages)) {
-          const snapCreds = await getDocs(
-            query(collection(db, "credentials"), where("packageId", "==", pkgIt.id), where("used", "==", false))
-          );
-          avail[pkgIt.id] = !snapCreds.empty;
+          const status = await checkPackageAvailability(pkgIt.id, 2);
+          if (status === true || status === false) {
+            avail[pkgIt.id] = status;
+          }
         }
         setAvailability(avail);
       } catch (e) {
